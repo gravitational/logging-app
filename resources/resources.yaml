@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: phony
+  namespace: kube-system
+spec:
+  containers:
+  - name: phony-log-bootstrap
+    image: log-bootstrap:0.0.1
+  - name: phony-log-forwarder
+    image: log-forwarder:0.0.1
+  - name: phony-log-collector
+    image: log-collector:0.0.1
+  - name: phony-log-uninstall
+    image: log-uninstall:0.0.1
+

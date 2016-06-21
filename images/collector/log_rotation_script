@@ -1,0 +1,3 @@
+#!/bin/sh
+
+/usr/bin/savelog -n -c 7 /var/log/messages
