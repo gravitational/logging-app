@@ -45,7 +45,7 @@ spec:
     spec:
       containers:
         - name: log-collector
-          image: apiserver:5000/log-collector:0.0.2
+          image: log-collector:0.0.2
           imagePullPolicy: Always
           ports:
             - name: udp
@@ -81,7 +81,7 @@ spec:
     spec:
       containers:
         - name: log-forwarder
-          image: apiserver:5000/log-forwarder:0.0.2
+          image: log-forwarder:0.0.2
           imagePullPolicy: Always
           volumeMounts:
             - name: gravitylog
