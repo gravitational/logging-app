@@ -1,25 +1,33 @@
-VER := 0.0.1
-BOOTSTRAP_TAG := gravitational.io/log-bootstrap:$(VER)
-UNINSTALL_TAG := gravitational.io/log-uninstall:$(VER)
-COLLECTOR_TAG := gravitational.io/log-collector:$(VER)
-FORWARDER_TAG := gravitational.io/log-forwarder:$(VER)
+VER := 0.0.2
+BOOTSTRAP_TAG := log-bootstrap:$(VER)
+UNINSTALL_TAG := log-uninstall:$(VER)
+COLLECTOR_TAG := log-collector:$(VER)
+FORWARDER_TAG := log-forwarder:$(VER)
+
+KUBECTL_URL := https://storage.googleapis.com/kubernetes-release/release/v1.2.0/bin/linux/amd64/kubectl
 
 .PHONY: all
 all: bootstrap uninstall collector forwarder
 
+kubectl:
+	curl -o kubectl -L $(KUBECTL_URL)
+	chmod +x kubectl
+
 .PHONY: bootstrap
-bootstrap:
-	docker build -t $(BOOTSTRAP_TAG) bootstrap
+bootstrap: kubectl
+	cp kubectl bootstrap/
+	docker build --pull -t $(BOOTSTRAP_TAG) bootstrap
 
 .PHONY: uninstall
-uninstall:
-	docker build -t $(UNINSTALL_TAG) uninstall
+uninstall: kubectl
+	cp kubectl uninstall/
+	docker build --pull -t $(UNINSTALL_TAG) uninstall
 
 .PHONY: collector
 collector:
-	docker build -t $(COLLECTOR_TAG) collector
+	docker build --pull -t $(COLLECTOR_TAG) collector
 
 # TODO: remote_syslog2 binary is in repo, make it build in Docker ct
 .PHONY: forwarder
 forwarder:
-	docker build -t $(FORWARDER_TAG) forwarder
+	docker build --pull -t $(FORWARDER_TAG) forwarder

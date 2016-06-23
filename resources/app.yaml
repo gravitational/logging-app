@@ -3,9 +3,9 @@ kind: SystemApplication
 metadata:
   namespace: kube-system
   name: logging-app
-  resourceVersion: 0.0.1
+  resourceVersion: 0.0.2
 hooks:
   install:
-    containerImage: log-bootstrap:0.0.1
+    containerImage: log-bootstrap:0.0.2
   uninstall:
-    containerImage: log-uninstall:0.0.1
+    containerImage: log-uninstall:0.0.2
