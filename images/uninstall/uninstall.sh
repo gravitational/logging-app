@@ -1,5 +1,6 @@
 #!/bin/sh
-kubectl delete \
+
+kubectl delete --namespace kube-system \
    job/log-bootstrap \
    rc/log-collector \
    daemonset/log-forwarder \
