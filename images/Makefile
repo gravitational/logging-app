@@ -1,8 +1,11 @@
 VER := 0.0.2
+
 BOOTSTRAP_TAG := log-bootstrap:$(VER)
 UNINSTALL_TAG := log-uninstall:$(VER)
 COLLECTOR_TAG := log-collector:$(VER)
 FORWARDER_TAG := log-forwarder:$(VER)
+
+REPO_URL ?= quay.io/gravitational
 
 KUBECTL_URL := https://storage.googleapis.com/kubernetes-release/release/v1.2.0/bin/linux/amd64/kubectl
 
@@ -31,3 +34,10 @@ collector:
 .PHONY: forwarder
 forwarder:
 	docker build --pull -t $(FORWARDER_TAG) forwarder
+
+.PHONY: deploy
+deploy:
+	$(foreach ct,$(COLLECTOR_TAG) $(FORWARDER_TAG), \
+		docker tag $(ct) $(REPO_URL)/$(ct) ; \
+		docker push $(REPO_URL)/$(ct) ; )
+

@@ -45,7 +45,7 @@ spec:
     spec:
       containers:
         - name: log-collector
-          image: log-collector:0.0.2
+          image: quay.io/gravitational/log-collector:0.0.2
           imagePullPolicy: Always
           ports:
             - name: udp
@@ -81,7 +81,7 @@ spec:
     spec:
       containers:
         - name: log-forwarder
-          image: log-forwarder:0.0.2
+          image: quay.io/gravitational/log-forwarder:0.0.2
           imagePullPolicy: Always
           volumeMounts:
             - name: gravitylog
