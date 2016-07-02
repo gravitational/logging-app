@@ -15,11 +15,11 @@ hooks:
         template:
           metadata:
             name: logging-app-bootstrap
-        spec:
-          restartPolicy: OnFailure
-          containers:
-            - name: bootstrap
-              image: log-bootstrap:0.0.2
+          spec:
+            restartPolicy: OnFailure
+            containers:
+              - name: bootstrap
+                image: log-bootstrap:0.0.2
 
   uninstall:
     spec:
@@ -31,8 +31,8 @@ hooks:
         template:
           metadata:
             name: logging-app-uninstall
-        spec:
-          restartPolicy: OnFailure
-          containers:
-            - name: bootstrap
-              image: log-uninstall:0.0.2
+          spec:
+            restartPolicy: OnFailure
+            containers:
+              - name: bootstrap
+                image: log-uninstall:0.0.2
