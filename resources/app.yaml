@@ -6,6 +6,33 @@ metadata:
   resourceVersion: 0.0.2
 hooks:
   install:
-    containerImage: log-bootstrap:0.0.2
+    spec:
+      apiVersion: batch/v1
+      kind: Job
+      metadata:
+        name: logging-app-bootstrap
+      spec:
+        template:
+          metadata:
+            name: logging-app-bootstrap
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: bootstrap
+              image: log-bootstrap:0.0.2
+
   uninstall:
-    containerImage: log-uninstall:0.0.2
+    spec:
+      apiVersion: batch/v1
+      kind: Job
+      metadata:
+        name: logging-app-uninstall
+      spec:
+        template:
+          metadata:
+            name: logging-app-uninstall
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: bootstrap
+              image: log-uninstall:0.0.2
