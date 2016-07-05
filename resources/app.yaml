@@ -6,6 +6,35 @@ metadata:
   resourceVersion: 0.0.2
 hooks:
   install:
-    containerImage: log-bootstrap:0.0.2
+    spec:
+      apiVersion: batch/v1
+      kind: Job
+      metadata:
+        name: logging-app-bootstrap
+      spec:
+        template:
+          metadata:
+            name: logging-app-bootstrap
+          spec:
+            restartPolicy: OnFailure
+            containers:
+              - name: bootstrap
+                image: hook:0.0.1
+                command: ["/usr/local/bin/kubectl", "apply", "-f", "/var/lib/gravity/resources/resources.yaml"]
+
   uninstall:
-    containerImage: log-uninstall:0.0.2
+    spec:
+      apiVersion: batch/v1
+      kind: Job
+      metadata:
+        name: logging-app-uninstall
+      spec:
+        template:
+          metadata:
+            name: logging-app-uninstall
+          spec:
+            restartPolicy: OnFailure
+            containers:
+              - name: bootstrap
+                image: hook:0.0.1
+                command: ["/usr/local/bin/kubectl", "delete", "-f", "/var/lib/gravity/resources/resources.yaml"]
