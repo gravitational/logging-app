@@ -4,7 +4,7 @@ metadata:
   namespace: kube-system
   repository: gravitational.io
   name: logging-app
-  resourceVersion: 0.0.4
+  resourceVersion: VERSION
 hooks:
   install:
     spec:
