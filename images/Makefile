@@ -1,7 +1,9 @@
-VER := 0.0.2
+ifndef VERSION
+$(error 'VERSION not specified')
+endif
 
-COLLECTOR_TAG := log-collector:$(VER)
-FORWARDER_TAG := log-forwarder:$(VER)
+COLLECTOR_TAG := log-collector:$(VERSION)
+FORWARDER_TAG := log-forwarder:$(VERSION)
 
 REPO_URL ?= quay.io/gravitational
 
