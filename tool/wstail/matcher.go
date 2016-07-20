@@ -7,7 +7,6 @@ import (
 
 func buildMatcher(filter filter) string {
 	containerMatcher := "(" + strings.Join(filter.containers, "|") + ")"
-	// TODO: for each pod, build sub-pattern with each container inside
 	podNamespace := match.placeholder
 	var pods []string
 	if len(filter.pods) > 0 {
