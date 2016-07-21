@@ -17,8 +17,12 @@ deploy:
 import: package
 	-$(GRAVITY) app delete --ops-url=$(OPS_URL) $(REPOSITORY)/$(NAME):$(VERSION) \
 		--force --insecure
-	$(GRAVITY) app import --debug --vendor --glob=**/*.yaml --registry-url=apiserver:5000 \
+	$(GRAVITY) app import --debug --insecure --vendor --glob=**/*.yaml \
+		--registry-url=apiserver:5000 --ops-url=$(OPS_URL) \
 		--set-image=log-collector:$(VERSION) --set-image=log-forwarder:$(VERSION) \
-		--ops-url=$(OPS_URL) --repository=$(REPOSITORY) --name=$(NAME) \
-		--version=$(VERSION) --insecure .
+		--include=resources --include=registry \
+		--repository=$(REPOSITORY) --name=$(NAME) --version=$(VERSION) .
 
+.PHONY: clean
+clean:
+	$(MAKE) -C images clean

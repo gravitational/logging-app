@@ -60,7 +60,7 @@ spec:
     spec:
       containers:
         - name: log-tail
-          image: gravitational.io/log-tail:0.0.1
+          image: gravitational.io/log-tailer:0.0.2
           imagePullPolicy: Always
           ports:
             - name: web
