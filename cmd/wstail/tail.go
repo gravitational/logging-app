@@ -29,6 +29,7 @@ func main() {
 
 	http.Handle("/ws", makeHandler(serveWs))
 
+	log.Infof("listening on %v", *addr)
 	log.Fatalln(http.ListenAndServe(*addr, nil))
 }
 
@@ -37,7 +38,9 @@ func writer(ws *websocket.Conn, filter filter) {
 	defer ws.Close()
 
 	tailCmd := exec.Command("tail", "-f", filePath)
-	grepCmd := exec.Command("grep", "--line-buffered", "-E", buildMatcher(filter))
+	// --line-buffered is not supported in busybox
+	// grepCmd := exec.Command("grep", "--line-buffered", "-E", buildMatcher(filter))
+	grepCmd := exec.Command("grep", "-E", buildMatcher(filter))
 	pipe, err := pipeCommands(tailCmd, grepCmd)
 	if err != nil {
 		log.Errorf("failed to build command pipeline: %v", err)
@@ -56,10 +59,10 @@ func writer(ws *websocket.Conn, filter filter) {
 		case line := <-messageC:
 			var payload = struct {
 				Type    string `json:"type"`
-				Payload []byte `json:"payload"`
+				Payload string `json:"payload"`
 			}{
 				Type:    "data",
-				Payload: line,
+				Payload: string(line),
 			}
 
 			if data, err := json.Marshal(&payload); err != nil {
