@@ -26,6 +26,7 @@ $(BINARIES): buildbox $(ASSETS)/Makefile
 	docker run --rm=true \
 		--volume=$(ASSETS):/assets \
 		--volume=$(BUILDDIR):/targetdir \
+		--volume=$(REPODIR):/gocode/src/github.com/gravitational/logging-app \
 		--env="TARGETDIR=/targetdir" \
 		$(BBOX) \
 		make -f /assets/Makefile
