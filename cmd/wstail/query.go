@@ -115,14 +115,14 @@ func (r *parser) parseOp() operator {
 
 func (r *parser) expect(tok rune) {
 	if r.tok != tok {
-		r.error(r.pos, fmt.Sprintf("expected %v but got %v", scanner.TokenString(tok), r.tok))
+		r.error(r.pos, fmt.Sprintf("expected %v but got %v", scanner.TokenString(tok), scanner.TokenString(r.tok)))
 	}
 	r.next()
 }
 
 func (r *parser) expectOr(tokens ...rune) {
 	if !tokenInSlice(r.tok, tokens) {
-		r.error(r.pos, fmt.Sprintf("expected any of %v but got %v", tokenStrings(tokens), r.tok))
+		r.error(r.pos, fmt.Sprintf("expected any of %v but got %v", tokenStrings(tokens), scanner.TokenString(r.tok)))
 	}
 	r.next()
 }

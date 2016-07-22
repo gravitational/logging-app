@@ -144,6 +144,8 @@ func serveWs(w http.ResponseWriter, r *http.Request) (err error) {
 	}
 	filter, err := parseQuery(bytes.NewReader(data))
 	if err != nil {
+		log.Infof("unable to parse query %s: %v", data, err)
+		// TODO: use the filter as raw search string if not in structured form
 		return trace.Wrap(err)
 	}
 
