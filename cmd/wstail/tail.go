@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"flag"
 	"io"
 	"net/http"
@@ -43,23 +44,79 @@ func writer(ws *websocket.Conn, filter filter) {
 	}
 	defer pipe.Close()
 
-	s := bufio.NewScanner(pipe)
-	s.Split(bufio.ScanLines)
-	var errDisconnected error
-	for s.Scan() && errDisconnected == nil {
-		line := s.Bytes()
+	messageC := newMessagePump(pipe)
+	closeNotifierC := newCloseNotifierLoop(ws)
 
-		// Skip to the actual log message in the stream
-		var logEntryPos int
-		for i := 0; i < 3; i++ {
-			logEntryPos = bytes.IndexByte(line, ' ')
-			if logEntryPos >= 0 {
-				line = line[logEntryPos+1:]
+	var errDisconnected error
+	for errDisconnected == nil {
+		select {
+		case <-closeNotifierC:
+			log.Infof("client disconnected")
+			return
+		case line := <-messageC:
+			var payload = struct {
+				Type    string `json:"type"`
+				Payload []byte `json:"payload"`
+			}{
+				Type:    "data",
+				Payload: line,
+			}
+
+			if data, err := json.Marshal(&payload); err != nil {
+				log.Infof("failed to convert to JSON: %v", err)
+			} else {
+				errDisconnected = ws.WriteMessage(websocket.TextMessage, data)
 			}
 		}
-
-		errDisconnected = ws.WriteMessage(websocket.TextMessage, line)
 	}
+}
+
+// newCloseNotifierLoop spawns a goroutine that periodically sends heartbeat messages
+// to the client in order to detect when the client connection is closed.
+// Returns a channel that will be closed if the client disconnects.
+func newCloseNotifierLoop(ws *websocket.Conn) chan struct{} {
+	notifierC := make(chan struct{})
+	go func() {
+		const heartbeatTimeout = 5 * time.Second
+		const heartbeatPayload = `{"type": "heartbeat"}`
+		ticker := time.NewTicker(heartbeatTimeout)
+		var err error
+		for err == nil {
+			select {
+			case <-ticker.C:
+				err = ws.WriteMessage(websocket.TextMessage, []byte(heartbeatPayload))
+			}
+		}
+		ticker.Stop()
+		close(notifierC)
+	}()
+	return notifierC
+}
+
+// newMessagePump spawns a goroutine to handle messages from the tailing process group.
+// Returns a channel where the received messages are sent to.
+func newMessagePump(r io.Reader) chan []byte {
+	messageC := make(chan []byte)
+	go func() {
+		s := bufio.NewScanner(r)
+		s.Split(bufio.ScanLines)
+		for s.Scan() {
+			line := s.Bytes()
+
+			// Skip to the actual log message in the stream
+			var logEntryPos int
+			for i := 0; i < 3; i++ {
+				logEntryPos = bytes.IndexByte(line, ' ')
+				if logEntryPos >= 0 {
+					line = line[logEntryPos+1:]
+				}
+			}
+
+			messageC <- line
+		}
+		log.Infof("closing tail message pump")
+	}()
+	return messageC
 }
 
 func pipeCommands(commands ...*exec.Cmd) (group *processGroup, err error) {
