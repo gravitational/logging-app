@@ -19,7 +19,7 @@ func buildMatcher(filter filter) string {
 	for _, podName := range pods {
 		podMatchers = append(podMatchers, fmt.Sprintf(`%v_%v_%v`, podName, podNamespace, containerMatcher))
 	}
-	return "^" + match.timestamp + match.whitespace + match.forwarder + match.whitespace + "(" + strings.Join(podMatchers, "|") + ")"
+	return "^" + prefix + match.whitespace + "(" + strings.Join(podMatchers, "|") + ")"
 }
 
 // Macthers

@@ -13,7 +13,7 @@ import (
 )
 
 // parseQuery interprets the specified reader as a query string and
-// split it into parts for each search component
+// splits it into parts for each search component
 func parseQuery(r io.Reader) (filter filter, err error) {
 	s := bufio.NewScanner(r)
 	s.Split(bufio.ScanLines)

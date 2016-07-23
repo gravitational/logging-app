@@ -229,8 +229,6 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
-const pollInterval = 2 * time.Second
-
 var (
 	filePath string
 	addr     = flag.String("addr", ":8083", "websocket service address")
