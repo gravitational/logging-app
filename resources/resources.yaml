@@ -64,7 +64,7 @@ spec:
             - name: extra-log-collector-config
               mountPath: /etc/rsyslog.d
         - name: log-tail
-          image: quay.io/gravitational/log-tailer:0.0.2
+          image: log-tailer:latest
           imagePullPolicy: Always
           ports:
             - name: web-tail

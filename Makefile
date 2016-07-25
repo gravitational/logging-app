@@ -19,7 +19,7 @@ import: package
 		--force --insecure
 	$(GRAVITY) app import --debug --insecure --vendor --glob=**/*.yaml \
 		--registry-url=apiserver:5000 --ops-url=$(OPS_URL) \
-		--set-image=log-collector:$(VERSION) --set-image=log-forwarder:$(VERSION) \
+		--set-image=log-collector:$(VERSION) --set-image=log-forwarder:$(VERSION) --set-image=log-tailer:$(VERSION) \
 		--include=resources --include=registry \
 		--repository=$(REPOSITORY) --name=$(NAME) --version=$(VERSION) .
 
