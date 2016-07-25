@@ -26,7 +26,7 @@ func buildMatcher(filter filter) string {
 	return matchPrefix + matchWhitespace + "(" + strings.Join(podMatchers, "|") + ")"
 }
 
-// Macthers
+// Matchers
 const matchTimestamp = `[[:digit:]]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[[:digit:]]+Z`
 const matchWhitespace = `\s+`
 const matchForwarder = `[a-zA-Z\0-9-]+`
