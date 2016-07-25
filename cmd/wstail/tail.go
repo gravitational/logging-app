@@ -107,6 +107,12 @@ func newCloseNotifierLoop(ws *websocket.Conn) chan struct{} {
 // newMessagePump spawns a goroutine to handle messages from the tailing process group.
 // Returns a channel where the received messages are sent to.
 func newMessagePump(r io.Reader) chan []byte {
+	// Log message format:
+	// <timestamp> <log-forwader-pod> <kubernetes-logfile-reference> <JSON-encoded-log-message>
+	// Since the output of this loop is the log message alone, skip this many
+	// columns to only output the relevant detail
+	const columnsToSkip = 3
+
 	messageC := make(chan []byte)
 	go func() {
 		s := bufio.NewScanner(r)
@@ -116,7 +122,7 @@ func newMessagePump(r io.Reader) chan []byte {
 
 			// Skip to the actual log message in the stream
 			var logEntryPos int
-			for i := 0; i < 3; i++ {
+			for i := 0; i < columnsToSkip; i++ {
 				logEntryPos = bytes.IndexByte(line, ' ')
 				if logEntryPos >= 0 {
 					line = line[logEntryPos+1:]

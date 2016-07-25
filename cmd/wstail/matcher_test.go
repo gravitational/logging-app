@@ -22,7 +22,7 @@ func (s *MatcherSuite) TestBuildsMatcher(c *C) {
 			filter: filter{
 				containers: []string{"foo", "bar"},
 			},
-			expected: "^" + prefix + match.whitespace + `([^_]+_[^_]+_(foo|bar))`,
+			expected: matchPrefix + matchWhitespace + `([^_]+_[^_]+_(foo|bar))`,
 			comment:  "combines multiple containers",
 		},
 		{
@@ -30,7 +30,7 @@ func (s *MatcherSuite) TestBuildsMatcher(c *C) {
 				containers: []string{"foo"},
 				pods:       []string{"qux", "baz"},
 			},
-			expected: "^" + prefix + match.whitespace + `(qux_[^_]+_(foo)|baz_[^_]+_(foo))`,
+			expected: matchPrefix + matchWhitespace + `(qux_[^_]+_(foo)|baz_[^_]+_(foo))`,
 			comment:  "replicates containers for each pod",
 		},
 	}

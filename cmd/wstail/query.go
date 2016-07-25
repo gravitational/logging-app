@@ -17,7 +17,7 @@ import (
 func parseQuery(r io.Reader) (filter filter, err error) {
 	s := bufio.NewScanner(r)
 	s.Split(bufio.ScanLines)
-	d := map[string][]string{}
+	terms := map[string][]string{}
 	var errors []error
 	for s.Scan() {
 		line := strings.TrimSpace(s.Text())
@@ -25,21 +25,21 @@ func parseQuery(r io.Reader) (filter filter, err error) {
 			continue
 		}
 		p := &parser{}
-		p.s.Init(strings.NewReader(line))
+		p.scanner.Init(strings.NewReader(line))
 		p.next()
-		for p.tok != scanner.EOF && len(p.errors) == 0 {
+		for p.token != scanner.EOF && len(p.errors) == 0 {
 			term := p.parseTerm()
-			if p.tok != scanner.EOF {
-				p.parseOp() // skip operators
+			if p.token != scanner.EOF {
+				p.parseOperator() // skip operators
 			}
-			d[strings.ToLower(term.name)] = append(d[term.name], term.value)
+			terms[strings.ToLower(term.name)] = append(terms[term.name], term.value)
 		}
 		if len(p.errors) > 0 {
 			errors = append(errors, p.errors...)
 			break
 		}
-		filter.containers = append(filter.containers, d["container"]...)
-		filter.pods = append(filter.pods, d["pod"]...)
+		filter.containers = append(filter.containers, terms["container"]...)
+		filter.pods = append(filter.pods, terms["pod"]...)
 	}
 	if len(errors) > 0 {
 		return filter, trace.NewAggregate(errors...)
@@ -60,11 +60,11 @@ type term struct {
 }
 
 type parser struct {
-	errors []error
-	s      scanner.Scanner
-	pos    scanner.Position
-	tok    rune
-	lit    string
+	errors  []error
+	scanner scanner.Scanner
+	pos     scanner.Position
+	token   rune
+	literal string
 }
 
 type operator string
@@ -74,15 +74,15 @@ const (
 )
 
 func (r *parser) next() {
-	r.tok = r.s.Scan()
-	r.pos = r.s.Position
-	r.lit = r.s.TokenText()
+	r.token = r.scanner.Scan()
+	r.pos = r.scanner.Position
+	r.literal = r.scanner.TokenText()
 }
 
 func (r *parser) parseTerm() *term {
 	name := r.parseIdent()
 	r.expect(':')
-	value := r.parseIndentOrLit()
+	value := r.parseIndentOrLiteral()
 	return &term{
 		name:  name,
 		value: value,
@@ -90,63 +90,63 @@ func (r *parser) parseTerm() *term {
 }
 
 func (r *parser) parseIdent() string {
-	name := r.lit
+	name := r.literal
 	r.expect(scanner.Ident)
 	return name
 }
 
-func (r *parser) parseIndentOrLit() (value string) {
+func (r *parser) parseIndentOrLiteral() (value string) {
 	var err error
-	if value, err = strconv.Unquote(r.lit); err != nil {
-		value = r.lit
+	if value, err = strconv.Unquote(r.literal); err != nil {
+		value = r.literal
 	}
 	r.expectOr(scanner.String, scanner.Ident)
 	return value
 }
 
-func (r *parser) parseOp() operator {
-	op := operator(strings.ToLower(r.lit))
-	switch op {
+func (r *parser) parseOperator() operator {
+	operator := operator(strings.ToLower(r.literal))
+	switch operator {
 	case opAND:
 	default:
-		r.error(r.pos, fmt.Sprintf("expected an operator but got %v", r.lit))
+		r.error(r.pos, fmt.Sprintf("expected an operator but got %v", r.literal))
 	}
 	r.expect(scanner.Ident)
-	return op
+	return operator
 }
 
-func (r *parser) expect(tok rune) {
-	if r.tok != tok {
-		r.error(r.pos, fmt.Sprintf("expected %v but got %v", scanner.TokenString(tok), scanner.TokenString(r.tok)))
+func (r *parser) expect(token rune) {
+	if r.token != token {
+		r.error(r.pos, fmt.Sprintf("expected %v but got %v", scanner.TokenString(token), scanner.TokenString(r.token)))
 	}
 	r.next()
 }
 
 func (r *parser) expectOr(tokens ...rune) {
-	if !tokenInSlice(r.tok, tokens) {
-		r.error(r.pos, fmt.Sprintf("expected any of %v but got %v", tokenStrings(tokens), scanner.TokenString(r.tok)))
+	if !tokenInSlice(r.token, tokens) {
+		r.error(r.pos, fmt.Sprintf("expected any of %v but got %v", tokenStrings(tokens), scanner.TokenString(r.token)))
 	}
 	r.next()
 }
 
-func (r *parser) error(pos scanner.Position, msg string) {
-	r.errors = append(r.errors, trace.Errorf("%v: %v", pos, msg))
+func (r *parser) error(pos scanner.Position, message string) {
+	r.errors = append(r.errors, trace.Errorf("%v: %v", pos, message))
 }
 
 func tokenStrings(tokens []rune) string {
 	var output bytes.Buffer
-	for i, tok := range tokens {
+	for i, token := range tokens {
 		if i > 0 {
 			output.WriteByte(',')
 		}
-		output.WriteString(scanner.TokenString(tok))
+		output.WriteString(scanner.TokenString(token))
 	}
 	return output.String()
 }
 
-func tokenInSlice(token rune, tokens []rune) bool {
-	for _, tok := range tokens {
-		if tok == token {
+func tokenInSlice(needle rune, haystack []rune) bool {
+	for _, token := range haystack {
+		if token == needle {
 			return true
 		}
 	}
