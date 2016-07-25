@@ -2,10 +2,14 @@ package main
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
 
 func buildMatcher(filter filter) string {
+	if filter.freeText != "" {
+		return regexp.QuoteMeta(strings.TrimSpace(filter.freeText))
+	}
 	containerMatcher := "(" + strings.Join(filter.containers, "|") + ")"
 	podNamespace := match.placeholder
 	var pods []string

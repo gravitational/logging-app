@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io"
 	"net/http"
 	"os/exec"
@@ -17,6 +18,9 @@ import (
 )
 
 const defaultTailSource = "/var/log/messages"
+
+// tailHistory defines the number of lines to output
+const tailHistory = 100
 
 func main() {
 	log.SetLevel(log.InfoLevel)
@@ -34,16 +38,21 @@ func main() {
 }
 
 func writer(ws *websocket.Conn, filter filter) {
-	log.Infof("active filter: %v", filter)
+	matcher := buildMatcher(filter)
+	log.Infof("active filter: %v (%v)", filter, matcher)
 	defer ws.Close()
 
-	tailCmd := exec.Command("tail", "-f", filePath)
-	// --line-buffered is not supported in busybox
-	// grepCmd := exec.Command("grep", "--line-buffered", "-E", buildMatcher(filter))
-	grepCmd := exec.Command("grep", "-E", buildMatcher(filter))
-	pipe, err := pipeCommands(tailCmd, grepCmd)
+	tailCmd := exec.Command("tail", fmt.Sprintf("-n%v", tailHistory), "-f", filePath)
+	commands := []*exec.Cmd{tailCmd}
+	if matcher != "" {
+		// --line-buffered is not supported in busybox
+		// grepCmd := exec.Command("grep", "--line-buffered", "-E", matcher)
+		grepCmd := exec.Command("grep", "-E", matcher)
+		commands = append(commands, grepCmd)
+	}
+	pipe, err := pipeCommands(commands...)
 	if err != nil {
-		log.Errorf("failed to build command pipeline: %v", err)
+		log.Errorf("failed to build a command pipeline: %v", err)
 	}
 	defer pipe.Close()
 
@@ -74,23 +83,22 @@ func writer(ws *websocket.Conn, filter filter) {
 	}
 }
 
-// newCloseNotifierLoop spawns a goroutine that periodically sends heartbeat messages
-// to the client in order to detect when the client connection is closed.
-// Returns a channel that will be closed if the client disconnects.
+// newCloseNotifierLoop spawns a goroutine that reads from the client.
+// The loop terminates once a message from the client has been received.
+// The only expected message the close message although the goroutine does not validate this fact.
+// Returns a channel that will be closed if client disconnects.
 func newCloseNotifierLoop(ws *websocket.Conn) chan struct{} {
 	notifierC := make(chan struct{})
 	go func() {
-		const heartbeatTimeout = 5 * time.Second
-		const heartbeatPayload = `{"type": "heartbeat"}`
-		ticker := time.NewTicker(heartbeatTimeout)
 		var err error
 		for err == nil {
-			select {
-			case <-ticker.C:
-				err = ws.WriteMessage(websocket.TextMessage, []byte(heartbeatPayload))
+			var msg []byte
+			_, msg, err = ws.ReadMessage()
+			if err == nil {
+				log.Infof("recv: %s", msg)
 			}
 		}
-		ticker.Stop()
+		log.Infof("closing connection with %v", err)
 		close(notifierC)
 	}()
 	return notifierC
@@ -205,8 +213,7 @@ func serveWs(w http.ResponseWriter, r *http.Request) (err error) {
 	filter, err := parseQuery(bytes.NewReader(data))
 	if err != nil {
 		log.Infof("unable to parse query %s: %v", data, err)
-		// TODO: use the filter as raw search string if not in structured form
-		return trace.Wrap(err)
+		filter.freeText = string(data)
 	}
 
 	go writer(ws, filter)

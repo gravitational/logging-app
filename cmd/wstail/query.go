@@ -50,6 +50,8 @@ func parseQuery(r io.Reader) (filter filter, err error) {
 type filter struct {
 	containers []string
 	pods       []string
+	// freeText defines the part of the filter with unstructured text
+	freeText string
 }
 
 type term struct {
