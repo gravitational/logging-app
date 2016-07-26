@@ -1,4 +1,4 @@
-export VERSION := 0.0.6
+export VERSION := 0.0.7
 REPOSITORY := gravitational.io
 NAME := logging-app
 OPS_URL ?= https://opscenter.localhost.localdomain:33009
