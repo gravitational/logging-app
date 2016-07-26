@@ -72,13 +72,20 @@ func writer(ws *websocket.Conn, filter filter) {
 		case <-closeNotifierC:
 			log.Infof("client disconnected")
 			return
-		case line := <-messageC:
+		case message := <-messageC:
+			var dockerMessage dockerLogMessage
+			if err = json.Unmarshal([]byte(message), &dockerMessage); err == nil {
+				message = dockerMessage.Log
+			} else {
+				log.Infof("failed to unmarshal `%v`: %v", message, err)
+				// Use the message as-is
+			}
 			var payload = struct {
 				Type    string `json:"type"`
 				Payload string `json:"payload"`
 			}{
 				Type:    "data",
-				Payload: string(line),
+				Payload: message,
 			}
 
 			if data, err := json.Marshal(&payload); err != nil {
@@ -88,6 +95,13 @@ func writer(ws *websocket.Conn, filter filter) {
 			}
 		}
 	}
+}
+
+// dockerLogMessage defines a partial view of the docker message as received from
+// the aggregated log file storage
+type dockerLogMessage struct {
+	// Log defines the contents of a log message
+	Log string `json:"log"`
 }
 
 // newCloseNotifierLoop spawns a goroutine that reads from the client.
@@ -113,14 +127,14 @@ func newCloseNotifierLoop(ws *websocket.Conn) chan struct{} {
 
 // newMessagePump spawns a goroutine to handle messages from the tailing process group.
 // Returns a channel where the received messages are sent to.
-func newMessagePump(r io.Reader, history io.ReadCloser) chan []byte {
+func newMessagePump(r io.Reader, history io.ReadCloser) chan string {
 	// Log message format:
 	// <timestamp> <log-forwader-pod> <kubernetes-logfile-reference> <JSON-encoded-log-message>
 	// Since the output of this loop is the log message alone, skip this many
 	// columns to only output the relevant detail
 	const columnsToSkip = 3
 
-	messageC := make(chan []byte)
+	messageC := make(chan string)
 	go func() {
 		if history != nil {
 			defer history.Close()
@@ -141,7 +155,10 @@ func newMessagePump(r io.Reader, history io.ReadCloser) chan []byte {
 				}
 			}
 
-			messageC <- line
+			// Convert to string to force a copy of the data as scanner.Bytes()
+			// returns a reference to the internal reusable memory buffer
+			// TODO: use a pool of reusable slices
+			messageC <- string(line)
 		}
 		log.Infof("closing tail message pump: %v", s.Err())
 	}()
