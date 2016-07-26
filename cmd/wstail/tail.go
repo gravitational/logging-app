@@ -43,7 +43,7 @@ func writer(ws *websocket.Conn, filter filter) {
 	defer ws.Close()
 
 	var err error
-	var history []byte
+	var history io.ReadCloser
 	tailCmd := exec.Command("tail", "-f", filePath)
 	commands := []*exec.Cmd{tailCmd}
 	if matcher != "" {
@@ -113,7 +113,7 @@ func newCloseNotifierLoop(ws *websocket.Conn) chan struct{} {
 
 // newMessagePump spawns a goroutine to handle messages from the tailing process group.
 // Returns a channel where the received messages are sent to.
-func newMessagePump(r io.Reader, history []byte) chan []byte {
+func newMessagePump(r io.Reader, history io.ReadCloser) chan []byte {
 	// Log message format:
 	// <timestamp> <log-forwader-pod> <kubernetes-logfile-reference> <JSON-encoded-log-message>
 	// Since the output of this loop is the log message alone, skip this many
@@ -122,8 +122,9 @@ func newMessagePump(r io.Reader, history []byte) chan []byte {
 
 	messageC := make(chan []byte)
 	go func() {
-		if len(history) > 0 {
-			messageC <- history
+		if history != nil {
+			defer history.Close()
+			r = io.MultiReader(history, r)
 		}
 
 		s := bufio.NewScanner(r)
@@ -142,14 +143,14 @@ func newMessagePump(r io.Reader, history []byte) chan []byte {
 
 			messageC <- line
 		}
-		log.Infof("closing tail message pump")
+		log.Infof("closing tail message pump: %v", s.Err())
 	}()
 	return messageC
 }
 
 // snapshot takes a snapshot of up to tailHistory last lines of logging history
 // for the specified matcher
-func snapshot(matcher, filePath string, tailHistory int) ([]byte, error) {
+func snapshot(matcher, filePath string, tailHistory int) (io.ReadCloser, error) {
 	log.Infof("requesting history for %v", matcher)
 	grepCmd := exec.Command("grep", "-E", matcher, filePath)
 	tailCmd := exec.Command("tail", fmt.Sprintf("-n%v", tailHistory))
@@ -157,14 +158,7 @@ func snapshot(matcher, filePath string, tailHistory int) ([]byte, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	defer pipe.Close()
-	var buf bytes.Buffer
-	_, err = io.Copy(&buf, pipe)
-	if trace.Unwrap(err) == io.EOF {
-		err = nil
-	}
-	log.Infof("history snapshot: %s", buf.Bytes())
-	return buf.Bytes(), trace.Wrap(err)
+	return pipe, nil
 }
 
 func pipeCommands(commands ...*exec.Cmd) (group *processGroup, err error) {
@@ -193,7 +187,7 @@ type processGroup struct {
 
 func (r *processGroup) Read(p []byte) (n int, err error) {
 	n, err = r.stream.Read(p)
-	return n, trace.Wrap(err)
+	return n, err
 }
 
 func (r *processGroup) Close() (err error) {
