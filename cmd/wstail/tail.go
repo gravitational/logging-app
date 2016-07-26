@@ -49,7 +49,7 @@ func writer(ws *websocket.Conn, filter filter) {
 	if matcher != "" {
 		history, err = snapshot(matcher, filePath, tailHistory)
 		if err != nil {
-			log.Errorf("failed to obtain %v lines of history for %v: %v", tailHistory, matcher, trace.DebugReport(err))
+			log.Warningf("failed to obtain history for %v: %v", matcher, trace.DebugReport(err))
 		}
 		// --line-buffered is not supported in busybox
 		// grepCmd := exec.Command("grep", "--line-buffered", "-E", matcher)
