@@ -42,9 +42,15 @@ func writer(ws *websocket.Conn, filter filter) {
 	log.Infof("active filter: %v (%v)", filter, matcher)
 	defer ws.Close()
 
-	tailCmd := exec.Command("tail", fmt.Sprintf("-n%v", tailHistory), "-f", filePath)
+	var err error
+	var history []byte
+	tailCmd := exec.Command("tail", "-f", filePath)
 	commands := []*exec.Cmd{tailCmd}
 	if matcher != "" {
+		history, err = snapshot(matcher, filePath, tailHistory)
+		if err != nil {
+			log.Errorf("failed to obtain %v lines of history for %v: %v", tailHistory, matcher, trace.DebugReport(err))
+		}
 		// --line-buffered is not supported in busybox
 		// grepCmd := exec.Command("grep", "--line-buffered", "-E", matcher)
 		grepCmd := exec.Command("grep", "-E", matcher)
@@ -53,10 +59,11 @@ func writer(ws *websocket.Conn, filter filter) {
 	pipe, err := pipeCommands(commands...)
 	if err != nil {
 		log.Errorf("failed to build a command pipeline: %v", err)
+		return
 	}
 	defer pipe.Close()
 
-	messageC := newMessagePump(pipe)
+	messageC := newMessagePump(pipe, history)
 	closeNotifierC := newCloseNotifierLoop(ws)
 
 	var errDisconnected error
@@ -106,7 +113,7 @@ func newCloseNotifierLoop(ws *websocket.Conn) chan struct{} {
 
 // newMessagePump spawns a goroutine to handle messages from the tailing process group.
 // Returns a channel where the received messages are sent to.
-func newMessagePump(r io.Reader) chan []byte {
+func newMessagePump(r io.Reader, history []byte) chan []byte {
 	// Log message format:
 	// <timestamp> <log-forwader-pod> <kubernetes-logfile-reference> <JSON-encoded-log-message>
 	// Since the output of this loop is the log message alone, skip this many
@@ -115,6 +122,10 @@ func newMessagePump(r io.Reader) chan []byte {
 
 	messageC := make(chan []byte)
 	go func() {
+		if len(history) > 0 {
+			messageC <- history
+		}
+
 		s := bufio.NewScanner(r)
 		s.Split(bufio.ScanLines)
 		for s.Scan() {
@@ -134,6 +145,26 @@ func newMessagePump(r io.Reader) chan []byte {
 		log.Infof("closing tail message pump")
 	}()
 	return messageC
+}
+
+// snapshot takes a snapshot of up to tailHistory last lines of logging history
+// for the specified matcher
+func snapshot(matcher, filePath string, tailHistory int) ([]byte, error) {
+	log.Infof("requesting history for %v", matcher)
+	grepCmd := exec.Command("grep", "-E", matcher, filePath)
+	tailCmd := exec.Command("tail", fmt.Sprintf("-n%v", tailHistory))
+	pipe, err := pipeCommands(grepCmd, tailCmd)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	defer pipe.Close()
+	var buf bytes.Buffer
+	_, err = io.Copy(&buf, pipe)
+	if trace.Unwrap(err) == io.EOF {
+		err = nil
+	}
+	log.Infof("history snapshot: %s", buf.Bytes())
+	return buf.Bytes(), trace.Wrap(err)
 }
 
 func pipeCommands(commands ...*exec.Cmd) (group *processGroup, err error) {

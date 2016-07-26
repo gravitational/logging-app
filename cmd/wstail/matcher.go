@@ -28,7 +28,7 @@ func buildMatcher(filter filter) string {
 
 // Matchers
 const matchTimestamp = `[[:digit:]]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[[:digit:]]+Z`
-const matchWhitespace = `\s+`
+const matchWhitespace = `[[:space:]]+`
 const matchForwarder = `[a-zA-Z\0-9-]+`
 const matchPlaceholder = `[^_]+`
 
