@@ -11,6 +11,11 @@ UPDATE_METADATA_OPTS := --repository=$(REPOSITORY) --name=$(NAME) --version=$(VE
 package:
 	$(MAKE) -C images all
 
+
+.PHONY: forwarder
+forwarder:
+	$(MAKE) -C images forwarder
+
 .PHONY: deploy
 deploy:
 	$(MAKE) -C images deploy

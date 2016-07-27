@@ -13,4 +13,4 @@ $(OUT):
 
 .PHONY: clean
 clean:
-	sudo rm build/*
+	-sudo rm build/*
