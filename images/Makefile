@@ -19,8 +19,16 @@ collector:
 
 # TODO: remote_syslog2 binary is in repo, make it build in Docker ct
 .PHONY: forwarder
-forwarder:
+forwarder: forwarder-build
 	docker build --pull -t $(FORWARDER_TAG) forwarder
+
+.PHONY: forwarder-build
+forwarder-build:
+	$(MAKE) -C $(PWD)/forwarder -e TARGET=forwarder TARGETDIR=forwarder -f $(PWD)/buildbox.mk
+
+.PHONY: forwarder-clean
+forwarder-clean:
+	$(MAKE) -C $(PWD)/forwarder clean
 
 .PHONY: tailer
 tailer: tailer-build
@@ -42,4 +50,4 @@ deploy:
 		docker push $(REPO_URL)/$(ct) ; )
 
 .PHONY: clean
-clean: tailer-clean
+clean: tailer-clean forwarder-clean
