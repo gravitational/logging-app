@@ -137,8 +137,7 @@ func newMessagePump(r io.Reader, history io.ReadCloser) chan string {
 	messageC := make(chan string)
 	go func() {
 		if history != nil {
-			defer history.Close()
-			r = io.MultiReader(history, r)
+			r = io.MultiReader(&autoClosingReader{history}, r)
 		}
 
 		s := bufio.NewScanner(r)
@@ -163,6 +162,20 @@ func newMessagePump(r io.Reader, history io.ReadCloser) chan string {
 		log.Infof("closing tail message pump: %v", s.Err())
 	}()
 	return messageC
+}
+
+// autoClosingReader closes the underlined reader when it reaches the end of stream
+type autoClosingReader struct {
+	io.ReadCloser
+}
+
+// Read implements io.Reader
+func (r *autoClosingReader) Read(p []byte) (n int, err error) {
+	n, err = r.ReadCloser.Read(p)
+	if err == io.EOF {
+		r.ReadCloser.Close()
+	}
+	return n, err
 }
 
 // snapshot takes a snapshot of up to tailHistory last lines of logging history
@@ -221,10 +234,18 @@ func (r *processGroup) terminate() {
 	head := r.commands[0]
 	go func() {
 		for _, cmd := range r.commands {
+			// Await termination of all processes in the group to prevent zombie processes
 			cmd.Wait()
 		}
 		terminated <- struct{}{}
 	}()
+
+	for _, cmd := range r.commands[1:] {
+		// Close stdout pipes set as input on each following process in the sequence
+		if closer, ok := cmd.Stdin.(io.Closer); ok {
+			closer.Close()
+		}
+	}
 
 	if err := head.Process.Signal(syscall.SIGINT); err != nil {
 		log.Infof("cannot terminate with SIGINT: %v", err)
