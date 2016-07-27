@@ -193,11 +193,13 @@ func snapshot(matcher, filePath string, tailHistory int) (io.ReadCloser, error) 
 
 func pipeCommands(commands ...*exec.Cmd) (group *processGroup, err error) {
 	var stdout io.ReadCloser
+	var closers []io.Closer
 	for i, cmd := range commands {
 		stdout, err = cmd.StdoutPipe()
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
+		closers = append(closers, stdout)
 		cmd.Start()
 		if i < len(commands)-1 {
 			commands[i+1].Stdin = stdout
@@ -206,13 +208,16 @@ func pipeCommands(commands ...*exec.Cmd) (group *processGroup, err error) {
 
 	return &processGroup{
 		commands: commands,
+		closers:  closers,
 		stream:   stdout,
 	}, nil
 }
 
+// processGroup groups the processes that build a processing pipe
 type processGroup struct {
 	commands []*exec.Cmd
-	stream   io.ReadCloser
+	closers  []io.Closer
+	stream   io.Reader
 }
 
 func (r *processGroup) Read(p []byte) (n int, err error) {
@@ -221,7 +226,10 @@ func (r *processGroup) Read(p []byte) (n int, err error) {
 }
 
 func (r *processGroup) Close() (err error) {
-	err = r.stream.Close()
+	// Close all open stdout handles
+	for _, closer := range r.closers {
+		closer.Close()
+	}
 	r.terminate()
 	return trace.Wrap(err)
 }
@@ -239,13 +247,6 @@ func (r *processGroup) terminate() {
 		}
 		terminated <- struct{}{}
 	}()
-
-	for _, cmd := range r.commands[1:] {
-		// Close stdout pipes set as input on each following process in the sequence
-		if closer, ok := cmd.Stdin.(io.Closer); ok {
-			closer.Close()
-		}
-	}
 
 	if err := head.Process.Signal(syscall.SIGINT); err != nil {
 		log.Infof("cannot terminate with SIGINT: %v", err)
