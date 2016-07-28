@@ -12,6 +12,7 @@ all: $(OUT)
 
 $(OUT): /assets/Makefile
 	@echo "\n---> Building $@\n"
+	go get github.com/tools/godep
 	mkdir -p $(BASEDIR)
 	cd $(BASEDIR) && git clone https://$(REPO) -b $(VERSION) --depth=1
 	cd $(REPODIR) && $(GOBUILDPREFIX) godep go build $(GOFLAGS) -o $@ .
