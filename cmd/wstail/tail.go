@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -22,22 +21,7 @@ const defaultTailSource = "/var/log/messages"
 // tailHistory defines the number of lines to output
 const tailHistory = 100
 
-func main() {
-	log.SetLevel(log.InfoLevel)
-	flag.Parse()
-	if flag.NArg() < 1 {
-		filePath = defaultTailSource
-	} else {
-		filePath = flag.Args()[0]
-	}
-
-	http.Handle("/ws", makeHandler(serveWs))
-
-	log.Infof("listening on %v", *addr)
-	log.Fatalln(http.ListenAndServe(*addr, nil))
-}
-
-func writer(ws *websocket.Conn, filter filter) {
+func tailer(ws *websocket.Conn, filter filter) {
 	matcher := buildMatcher(filter)
 	log.Infof("active filter: %v (%v)", filter, matcher)
 	defer ws.Close()
@@ -286,7 +270,7 @@ func serveWs(w http.ResponseWriter, r *http.Request) (err error) {
 		filter.freeText = string(data)
 	}
 
-	go writer(ws, filter)
+	go tailer(ws, filter)
 	return nil
 }
 
@@ -305,8 +289,3 @@ type handlerFunc func(w http.ResponseWriter, r *http.Request) error
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
-
-var (
-	filePath string
-	addr     = flag.String("addr", ":8083", "websocket service address")
-)
