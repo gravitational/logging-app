@@ -65,7 +65,7 @@ func updateForwarders(w http.ResponseWriter, r *http.Request) (err error) {
 	namespaceFlag := fmt.Sprintf("--namespace=%v", namespace)
 	// Restart the log collector by deleting the collector pod
 	if out, err = kubectlCmd("get", "po", namespaceFlag, "-l=role=log-collector",
-		`--output=jsonpath='{range .items[*]}{.metadata.name}{","}{end}'`); err != nil {
+		`--output=jsonpath={range .items[*]}{.metadata.name}{","}{end}`); err != nil {
 		return trace.Wrap(err, "failed to find log collector pods: %s", out)
 	}
 	podNames := bytes.Split(out, []byte{','})
@@ -80,7 +80,7 @@ func updateForwarders(w http.ResponseWriter, r *http.Request) (err error) {
 	}
 	if err = retryWithAbort(retryInterval, retryAttempts, func() (bool, error) {
 		out, err = kubectlCmd("get", "rc", "-l=name=log-collector", namespaceFlag,
-			"{.items[*].status.replicas}")
+			"--output=jsonpath={.items[*].status.replicas}")
 		if err != nil {
 			return false, trace.Wrap(err, "failed to query rc status: %s", out)
 		}
@@ -135,7 +135,7 @@ metadata:
   name: extra-log-collector-config
   namespace: {{ .Namespace }}
 data:{{range .Forwarders}}
-  {{forwarderName .}}.conf: *.* {{forwarderProtocol .}}{{.HostPort}}{{end}}
+  {{forwarderName .}}.conf: "*.* {{forwarderProtocol .}}{{.HostPort}}"{{end}}
 `))
 
 func readJSON(r *http.Request, data interface{}) error {
