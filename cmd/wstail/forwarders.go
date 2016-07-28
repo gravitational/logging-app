@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -28,6 +29,11 @@ func updateForwarders(w http.ResponseWriter, r *http.Request) (err error) {
 		return trace.Wrap(err)
 	}
 
+	var namespace string
+	if namespace = os.Getenv("POD_NAMESPACE"); namespace == "" {
+		namespace = "kube-system"
+	}
+
 	log.Infof("forwarder configuration update: %v", forwarders)
 
 	f, err := ioutil.TempFile("/tmp", "configmap")
@@ -39,22 +45,25 @@ func updateForwarders(w http.ResponseWriter, r *http.Request) (err error) {
 		os.Remove(f.Name())
 	}()
 
-	if err = configTemplate.Execute(f, forwarders); err != nil {
+	var config = struct {
+		Namespace  string
+		Forwarders []forwarder
+	}{
+		Namespace:  namespace,
+		Forwarders: forwarders,
+	}
+	if err = configTemplate.Execute(io.MultiWriter(os.Stdout, f), &config); err != nil {
 		return trace.Wrap(err)
 	}
 
 	var out []byte
 	if out, err = kubectlCmd("apply", "-f", f.Name()); err != nil {
+		log.Errorf("failed to apply ConfigMap:\n%s", out)
 		return trace.Wrap(err, "failed to apply ConfigMap:\n%s", out)
 	}
 
-	var namespace string
-	if namespace = os.Getenv("POD_NAMESPACE"); namespace == "" {
-		namespace = "kube-system"
-	}
-
 	namespaceFlag := fmt.Sprintf("--namespace=%v", namespace)
-	// Restart the log collector by deleting the Pod
+	// Restart the log collector by deleting the collector pod
 	if out, err = kubectlCmd("get", "po", namespaceFlag, "-l=role=log-collector",
 		`--output=jsonpath='{range .items[*]}{.metadata.name}{","}{end}'`); err != nil {
 		return trace.Wrap(err, "failed to find log collector pods: %s", out)
@@ -100,7 +109,7 @@ type forwarder struct {
 }
 
 func forwarderName(forwarder forwarder) string {
-	return strings.Replace(strings.Replace(forwarder.HostPort, ".", "_", -1), ":", "_", -1)
+	return strings.Replace(forwarder.HostPort, ":", "", -1)
 }
 
 func forwarderProtocol(forwarder forwarder) string {
@@ -124,8 +133,8 @@ kind: ConfigMap
 apiVersion: v1
 metadata:
   name: extra-log-collector-config
-  namespace: kube-system
-data:{{range .}}
+  namespace: {{ .Namespace }}
+data:{{range .Forwarders}}
   {{forwarderName .}}.conf: *.* {{forwarderProtocol .}}{{.HostPort}}{{end}}
 `))
 

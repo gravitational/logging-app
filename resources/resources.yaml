@@ -47,6 +47,9 @@ spec:
         role: log-collector
         version: v1
     spec:
+      # FIXME: run on master to get access to kubectl
+      nodeSelector:
+        gravitational.io/k8s-role: master
       containers:
         - name: log-collector
           image: log-collector:latest
@@ -75,6 +78,8 @@ spec:
               mountPath: /var/log
             - name: kubectl
               mountPath: /usr/local/bin/kubectl
+            - name: scratch
+              mountPath: /tmp
           env:
           - name: POD_NAMESPACE
             valueFrom:
@@ -90,6 +95,8 @@ spec:
         - name: kubectl
           hostPath:
             path: /usr/bin/kubectl
+        - name: scratch
+          emptyDir: {}
 ---
 apiVersion: extensions/v1beta1
 kind: DaemonSet

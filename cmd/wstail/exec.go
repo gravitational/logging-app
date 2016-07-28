@@ -8,7 +8,7 @@ import (
 )
 
 func kubectlCmd(cmd string, args ...string) (out []byte, err error) {
-	call := exec.Command("/usr/bin/local/kubectl", append([]string{cmd}, args...)...)
+	call := exec.Command("/usr/local/bin/kubectl", append([]string{cmd}, args...)...)
 	log.Infof("exec %v", call)
 	if out, err = call.CombinedOutput(); err != nil {
 		return out, trace.Wrap(err)
