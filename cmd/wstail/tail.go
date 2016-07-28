@@ -137,8 +137,7 @@ func newMessagePump(r io.Reader, history io.ReadCloser) chan string {
 	messageC := make(chan string)
 	go func() {
 		if history != nil {
-			defer history.Close()
-			r = io.MultiReader(history, r)
+			r = io.MultiReader(&autoClosingReader{history}, r)
 		}
 
 		s := bufio.NewScanner(r)
@@ -165,6 +164,20 @@ func newMessagePump(r io.Reader, history io.ReadCloser) chan string {
 	return messageC
 }
 
+// autoClosingReader closes the underlined reader when it reaches the end of stream
+type autoClosingReader struct {
+	io.ReadCloser
+}
+
+// Read implements io.Reader
+func (r *autoClosingReader) Read(p []byte) (n int, err error) {
+	n, err = r.ReadCloser.Read(p)
+	if err == io.EOF {
+		r.ReadCloser.Close()
+	}
+	return n, err
+}
+
 // snapshot takes a snapshot of up to tailHistory last lines of logging history
 // for the specified matcher
 func snapshot(matcher, filePath string, tailHistory int) (io.ReadCloser, error) {
@@ -180,11 +193,13 @@ func snapshot(matcher, filePath string, tailHistory int) (io.ReadCloser, error) 
 
 func pipeCommands(commands ...*exec.Cmd) (group *processGroup, err error) {
 	var stdout io.ReadCloser
+	var closers []io.Closer
 	for i, cmd := range commands {
 		stdout, err = cmd.StdoutPipe()
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
+		closers = append(closers, stdout)
 		cmd.Start()
 		if i < len(commands)-1 {
 			commands[i+1].Stdin = stdout
@@ -193,13 +208,16 @@ func pipeCommands(commands ...*exec.Cmd) (group *processGroup, err error) {
 
 	return &processGroup{
 		commands: commands,
+		closers:  closers,
 		stream:   stdout,
 	}, nil
 }
 
+// processGroup groups the processes that build a processing pipe
 type processGroup struct {
 	commands []*exec.Cmd
-	stream   io.ReadCloser
+	closers  []io.Closer
+	stream   io.Reader
 }
 
 func (r *processGroup) Read(p []byte) (n int, err error) {
@@ -208,7 +226,10 @@ func (r *processGroup) Read(p []byte) (n int, err error) {
 }
 
 func (r *processGroup) Close() (err error) {
-	err = r.stream.Close()
+	// Close all open stdout handles
+	for _, closer := range r.closers {
+		closer.Close()
+	}
 	r.terminate()
 	return trace.Wrap(err)
 }
@@ -221,6 +242,7 @@ func (r *processGroup) terminate() {
 	head := r.commands[0]
 	go func() {
 		for _, cmd := range r.commands {
+			// Await termination of all processes in the group to prevent zombie processes
 			cmd.Wait()
 		}
 		terminated <- struct{}{}
