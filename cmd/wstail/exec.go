@@ -7,10 +7,10 @@ import (
 	"github.com/gravitational/trace"
 )
 
-func kubectlCmd(name string, args ...string) (out []byte, err error) {
-	cmd := exec.Command("/usr/bin/local/kubectl", args...)
-	log.Infof("exec %v", cmd)
-	if out, err = cmd.CombinedOutput(); err != nil {
+func kubectlCmd(cmd string, args ...string) (out []byte, err error) {
+	call := exec.Command("/usr/bin/local/kubectl", append([]string{cmd}, args...)...)
+	log.Infof("exec %v", call)
+	if out, err = call.CombinedOutput(); err != nil {
 		return out, trace.Wrap(err)
 	}
 	return out, nil

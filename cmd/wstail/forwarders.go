@@ -125,10 +125,8 @@ apiVersion: v1
 metadata:
   name: extra-log-collector-config
   namespace: kube-system
-data:
-  {{range . -}}
-  {{- forwarderName .}}.conf: *.* {{forwarderProtocol .}}{{.HostPort}}
-  {{end -}}
+data:{{range .}}
+  {{forwarderName .}}.conf: *.* {{forwarderProtocol .}}{{.HostPort}}{{end}}
 `))
 
 func readJSON(r *http.Request, data interface{}) error {

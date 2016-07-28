@@ -75,8 +75,6 @@ spec:
               mountPath: /var/log
             - name: kubectl
               mountPath: /usr/local/bin/kubectl
-            - name: scratch
-              mountPath: /tmp
           env:
             name: POD_NAMESPACE
             valueFrom:
@@ -92,8 +90,6 @@ spec:
         - name: kubectl
           hostPath:
             path: /usr/bin/kubectl
-        - name: scratch
-          emptyDir: {}
 ---
 apiVersion: extensions/v1beta1
 kind: DaemonSet
