@@ -1,18 +1,29 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"html/template"
+	"io/ioutil"
 	"net/http"
+	"os"
 	"strings"
+	"time"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
 )
 
 // updateForwarders updates log forwarder configuration and reloads the logging
 // service.
-// It receives new forwarder configuration, updates the ConfigMap and sends
-// a SIGHUP to rsyslog as a request to reload the configuration
+// It receives new forwarder configuration, updates the ConfigMap and restarts the collector
+// pod as a request to reload the rsyslogd configuration
 func updateForwarders(w http.ResponseWriter, r *http.Request) (err error) {
-	var forwarders forwarderConfig
+	if r.Method != "PUT" {
+		return trace.BadParameter("invalid HTTP method: %v", r.Method)
+	}
+	var forwarders []forwarder
 	if err = readJSON(r, &forwarders); err != nil {
 		return trace.Wrap(err)
 	}
@@ -23,12 +34,16 @@ func updateForwarders(w http.ResponseWriter, r *http.Request) (err error) {
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	defer f.Close()
+	defer func() {
+		f.Close()
+		os.Remove(f.Name())
+	}()
 
 	if err = configTemplate.Execute(f, forwarders); err != nil {
 		return trace.Wrap(err)
 	}
 
+	var out []byte
 	if out, err = kubectlCmd("apply", "-f", f.Name()); err != nil {
 		return trace.Wrap(err, "failed to apply ConfigMap:\n%s", out)
 	}
@@ -38,34 +53,35 @@ func updateForwarders(w http.ResponseWriter, r *http.Request) (err error) {
 		namespace = "kube-system"
 	}
 
-	namespaceFlag := fmt.Sprintf("--namespace=", namespace)
+	namespaceFlag := fmt.Sprintf("--namespace=%v", namespace)
 	// Restart the log collector by deleting the Pod
 	if out, err = kubectlCmd("get", "po", namespaceFlag, "-l=role=log-collector",
 		`--output=jsonpath='{range .items[*]}{.metadata.name}{","}{end}'`); err != nil {
 		return trace.Wrap(err, "failed to find log collector pods: %s", out)
 	}
-	podNames := bytes.Split(out, []byte(','))
+	podNames := bytes.Split(out, []byte{','})
 	for _, podName := range podNames {
 		podName = bytes.TrimSpace(podName)
+		if len(podName) == 0 {
+			continue
+		}
 		if out, err = kubectlCmd("delete", "po", string(podName), namespaceFlag); err != nil {
 			return trace.Wrap(err, "failed to delete pod %s:\n%s", podName, out)
 		}
 	}
-	// TODO: wait until replication controller has restarted the pod
-	// kubectl get rc -l=name=log-collector -o jsonpath={.items[*].status.replicas}
-	if err = utils.RetryWithAbort(retryInterval, retryAttempts, func() (bool, error) {
+	if err = retryWithAbort(retryInterval, retryAttempts, func() (bool, error) {
 		out, err = kubectlCmd("get", "rc", "-l=name=log-collector", namespaceFlag,
 			"{.items[*].status.replicas}")
 		if err != nil {
 			return false, trace.Wrap(err, "failed to query rc status: %s", out)
 		}
-		if !bytes.Equal(bytes.TrimSpace(out), '1') {
+		if !bytes.Equal(bytes.TrimSpace(out), []byte{'1'}) {
 			log.Infof("rc status invalid, expected replicas=1, got `%s`", out)
 			return false, nil
 		}
 		return true, nil
 	}); err != nil {
-		return nil, trace.Wrap(err, "failed to wait on rc completion condition")
+		return trace.Wrap(err, "failed to wait on rc completion condition")
 	}
 	log.Infof("forwarder configuration updated")
 	return nil
@@ -78,16 +94,16 @@ type forwarderConfig struct {
 // forwarder defines a log forwarder
 type forwarder struct {
 	// HostPort defines the address the forwarder is listening on
-	Hoststring `json:"host_port"`
+	HostPort string `json:"host_port"`
 	// Protocol defines the protocol to configure for this forwarder (TCP/UDP)
 	Protocol string `json:"protocol"`
 }
 
-func forwarderName(forwader forwarder) string {
-	return strings.Replace(forwarder.HostPort, ":", "_", -1)
+func forwarderName(forwarder forwarder) string {
+	return strings.Replace(strings.Replace(forwarder.HostPort, ".", "_", -1), ":", "_", -1)
 }
 
-func forwarderProtocol(forwader forwarder) string {
+func forwarderProtocol(forwarder forwarder) string {
 	switch forwarder.Protocol {
 	case "udp":
 		return "@"
@@ -110,7 +126,37 @@ metadata:
   name: extra-log-collector-config
   namespace: kube-system
 data:
-  {{range .Forwarders -}}
+  {{range . -}}
   {{- forwarderName .}}.conf: *.* {{forwarderProtocol .}}{{.HostPort}}
   {{end -}}
 `))
+
+func readJSON(r *http.Request, data interface{}) error {
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if err := json.Unmarshal(body, &data); err != nil {
+		return trace.BadParameter("invalid request: %v", err)
+	}
+	return nil
+}
+
+const retryInterval = 5 * time.Second
+const retryAttempts = 50
+
+func retryWithAbort(period time.Duration, attempts int, fn func() (bool, error)) (err error) {
+	for i := 1; i <= attempts; i += 1 {
+		var succeeded bool
+		if succeeded, err = fn(); succeeded {
+			return nil
+		} else if err == nil {
+			log.Infof("unsuccessfull attempt:%v, retry in %v", trace.UserMessage(err), period)
+			time.Sleep(period)
+			continue
+		}
+		break
+	}
+	log.Errorf("all attempts failed:\n%v", trace.DebugReport(err))
+	return trace.Wrap(err)
+}

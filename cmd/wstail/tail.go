@@ -274,18 +274,6 @@ func serveWs(w http.ResponseWriter, r *http.Request) (err error) {
 	return nil
 }
 
-// makeHandler wraps a handler with http.Handler
-func makeHandler(handler handlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		err := handler(w, r)
-		if err != nil {
-			trace.WriteError(w, err)
-		}
-	}
-}
-
-type handlerFunc func(w http.ResponseWriter, r *http.Request) error
-
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
