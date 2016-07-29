@@ -40,26 +40,29 @@ func updateForwarders(w http.ResponseWriter, r *http.Request) (err error) {
 			return filepath.SkipDir
 		}
 		log.Infof("removing %v", path)
-		return os.Remove(path)
+		return trace.Wrap(os.Remove(path), "failed to remove %v", path)
 	}); err != nil {
 		log.Warningf("failed to delete forwarder configuration files: %v", err)
 	}
 
 	// Write new forwarder configuration
 	for _, forwarder := range forwarders {
-		f, err := os.Create(path(forwarder))
+		path := path(forwarder)
+		f, err := os.Create(path)
 		if err != nil {
 			return trace.Wrap(err)
 		}
 		_, err = f.WriteString(config(forwarder))
-		f.Close()
+		if errClose := f.Close(); errClose != nil {
+			log.Warningf("failed to close file %v: %v", path, errClose)
+		}
 		if err != nil {
 			return trace.Wrap(err)
 		}
 	}
 
 	// Reload rsyslogd
-	if out, err := exec.Command("/etc/init.d/rsyslog", "restart").CombinedOutput(); err != nil {
+	if out, err := exec.Command(rsyslogInitScript, "restart").CombinedOutput(); err != nil {
 		return trace.Wrap(err, "failed to restart rsyslogd: %s", out)
 	}
 
@@ -68,6 +71,8 @@ func updateForwarders(w http.ResponseWriter, r *http.Request) (err error) {
 }
 
 const rsyslogConfigDir = "/etc/rsyslog.d"
+
+const rsyslogInitScript = "/etc/init.d/rsyslog"
 
 func config(forwarder forwarders.Forwarder) string {
 	return fmt.Sprintf("*.* %v%v", protocol(forwarder), forwarder.HostPort)
