@@ -31,6 +31,30 @@ TCP/UDP to `log-collector.kube-system.svc.cluster.local`.
 
 Logs are currently written to `/var/log/messages` on the host node.
 
+Another facet of the collector container is a simple logging configuration and tailing service.
+The service exposes the following endpoints:
+  - /ws         - websocket endpoint that streams logs to the client
+  - /forwarders - HTTP endpoint for managing log forwarders
+
+The websocket streaming endpoint has a very simple protocol: the first message from the client upon
+connection is a free-form filter query to choose which logs to stream. After that the client is only
+receiving the frames with actual log messages until it chooses to close the connection. It is important
+for the client to properly terminate the connection as tailing service depends on the close event to 
+release resources used for this service.
+
+Implemented query syntax supports filtering on `containers`, `pods` and, in the future, by log file name:
+
+```
+container:my-app-pod-container and pod:my-app-pod-1fbc6
+```
+If the query is ill-formed or does not contain any sub-filters (i.e. arbitrary search query) - it is used verbatim.
+
+The log forwarder management endpoint handles a PUT request with a JSON-encoded list of external forwarders
+to configure:
+```shell
+$ curl -H "Content-Type: application/json" -X PUT -d '[{"host_port":"my.example.com:514","protocol":"tcp"},{"host_port":"your.example.com:514", "protocol":"udp"}]' http://localhost:8083/forwarders
+```
+
 ## Additional configuration
 
 The collector mounts a `ConfigMap` named `extra-log-collector-config`. You can
