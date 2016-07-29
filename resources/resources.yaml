@@ -66,11 +66,6 @@ spec:
               mountPath: /var/log
             - name: extra-log-collector-config
               mountPath: /etc/rsyslog.d
-          env:
-          - name: POD_NAMESPACE
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.namespace
       volumes:
         - name: extra-log-collector-config
           configMap:
