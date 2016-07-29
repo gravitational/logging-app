@@ -4,6 +4,8 @@ import (
 	"flag"
 	"net/http"
 
+	"github.com/gravitational/logging-app/lib/forwarders"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
 )
@@ -18,7 +20,7 @@ func main() {
 	}
 
 	http.Handle("/ws", makeHandler(serveWs))
-	http.Handle("/forwarders", makeHandler(updateForwarders))
+	http.Handle("/forwarders", makeHandler(forwarders.Update))
 
 	log.Infof("listening on %v", *addr)
 	log.Fatalln(http.ListenAndServe(*addr, nil))

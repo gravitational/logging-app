@@ -1,41 +1,54 @@
-package main
+package forwarders
 
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"text/template"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
 )
 
-// updateForwarders updates log forwarder configuration and reloads the logging
+// Update updates log forwarder configuration and reloads the logging
 // service.
 // It receives new forwarder configuration, updates the configuration and restarts the rsyslog daemon
 // to force it to reload the configuration
-func updateForwarders(w http.ResponseWriter, r *http.Request) (err error) {
+func Update(w http.ResponseWriter, r *http.Request) (err error) {
 	if r.Method != "PUT" {
 		return trace.BadParameter("invalid HTTP method: %v", r.Method)
 	}
-	var forwarders []forwarder
+	var forwarders []Forwarder
 	if err = readJSON(r, &forwarders); err != nil {
 		return trace.Wrap(err)
 	}
 
-	// TODO: remove pervious configuration files
-	for _, forwarder := range forwarders {
-		f, err := os.Create(forwarderPath(forwarder))
+	if err = filepath.Walk(rsyslogConfigDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		err = configTemplate.Execute(io.MultiWriter(os.Stdout, f), forwarder)
+		if path == rsyslogConfigDir {
+			return nil
+		}
+		if info.IsDir() {
+			return filepath.SkipDir
+		}
+		log.Infof("removing %v", path)
+		return os.Remove(path)
+	}); err != nil {
+		log.Warningf("failed to delete forwarder configuration files: %v", err)
+	}
+
+	for _, forwarder := range forwarders {
+		f, err := os.Create(forwarder.path())
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		_, err = f.WriteString(forwarder.config())
 		f.Close()
 		if err != nil {
 			return trace.Wrap(err)
@@ -51,25 +64,27 @@ func updateForwarders(w http.ResponseWriter, r *http.Request) (err error) {
 	return nil
 }
 
-type forwarderConfig struct {
-	Forwarders []forwarder `json:"forwarders"`
-}
+const rsyslogConfigDir = "/etc/rsyslog.d"
 
-// forwarder defines a log forwarder
-type forwarder struct {
+// Forwarder defines a log forwarder
+type Forwarder struct {
 	// HostPort defines the address the forwarder is listening on
 	HostPort string `json:"host_port"`
 	// Protocol defines the protocol to configure for this forwarder (TCP/UDP)
 	Protocol string `json:"protocol"`
 }
 
-func forwarderPath(forwarder forwarder) string {
-	name := fmt.Sprintf("%v.conf", strings.Replace(forwarder.HostPort, ":", "_", -1))
+func (r Forwarder) config() string {
+	return fmt.Sprintf("*.* %v%v", r.protocol(), r.HostPort)
+}
+
+func (r Forwarder) path() string {
+	name := fmt.Sprintf("%v.conf", strings.Replace(r.HostPort, ":", "_", -1))
 	return filepath.Join("/etc/rsyslog.d", name)
 }
 
-func forwarderProtocol(forwarder forwarder) string {
-	switch forwarder.Protocol {
+func (r Forwarder) protocol() string {
+	switch r.Protocol {
 	case "udp":
 		return "@"
 	case "tcp":
@@ -78,12 +93,6 @@ func forwarderProtocol(forwarder forwarder) string {
 		return "@@"
 	}
 }
-
-var forwarderFuncs = template.FuncMap{"protocol": forwarderProtocol}
-
-var configTemplate = template.Must(template.New("forwarder").Funcs(forwarderFuncs).
-	Parse(`*.* {{protocol .}}{{.HostPort}}
-`))
 
 func readJSON(r *http.Request, data interface{}) error {
 	body, err := ioutil.ReadAll(r.Body)
