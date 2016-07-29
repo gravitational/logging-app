@@ -14,23 +14,12 @@ spec:
       protocol: TCP
       port: 514
       targetPort: 5514
-  selector:
-    role: log-collector
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: log-tailer
-  namespace: kube-system
-spec:
-  type: ClusterIP
-  ports:
     - name: web-tail
       protocol: TCP
       port: 8083
       targetPort: 8083
   selector:
-    role: log-tailer
+    role: log-collector
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -58,9 +47,6 @@ spec:
         role: log-collector
         version: v1
     spec:
-      # FIXME: run on master as log-tailer needs access to the same host path
-      nodeSelector:
-        gravitational.io/k8s-role: master
       containers:
         - name: log-collector
           image: log-collector:latest
@@ -72,11 +58,19 @@ spec:
             - name: tcp
               protocol: TCP
               containerPort: 514
+            - name: web-tail
+              protocol: TCP
+              containerPort: 8083
           volumeMounts:
             - name: varlog
               mountPath: /var/log
             - name: extra-log-collector-config
               mountPath: /etc/rsyslog.d
+          env:
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
       volumes:
         - name: extra-log-collector-config
           configMap:
@@ -84,58 +78,6 @@ spec:
         - name: varlog
           hostPath:
             path: /var/log
----
-apiVersion: v1
-kind: ReplicationController
-metadata:
-  labels:
-    role: log-tailer
-    version: v1
-  name: log-tailer
-  namespace: kube-system
-spec:
-  replicas: 1
-  selector:
-    role: log-tailer
-    version: v1
-  template:
-    metadata:
-      labels:
-        role: log-tailer
-        version: v1
-    spec:
-      # FIXME: run on master to get access to kubectl
-      nodeSelector:
-        gravitational.io/k8s-role: master
-      containers:
-        - name: log-tail
-          image: log-tailer:latest
-          imagePullPolicy: Always
-          ports:
-            - name: web-tail
-              protocol: TCP
-              containerPort: 8083
-          volumeMounts:
-            - name: varlog
-              mountPath: /var/log
-            - name: kubectl
-              mountPath: /usr/local/bin/kubectl
-            - name: scratch
-              mountPath: /tmp
-          env:
-          - name: POD_NAMESPACE
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.namespace
-      volumes:
-        - name: varlog
-          hostPath:
-            path: /var/log
-        - name: kubectl
-          hostPath:
-            path: /usr/bin/kubectl
-        - name: scratch
-          emptyDir: {}
 ---
 apiVersion: extensions/v1beta1
 kind: DaemonSet

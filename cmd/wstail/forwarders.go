@@ -1,16 +1,16 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
-	"time"
+	"text/template"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
@@ -18,8 +18,8 @@ import (
 
 // updateForwarders updates log forwarder configuration and reloads the logging
 // service.
-// It receives new forwarder configuration, updates the ConfigMap and restarts the collector
-// pod as a request to reload the rsyslogd configuration
+// It receives new forwarder configuration, updates the configuration and restarts the rsyslog daemon
+// to force it to reload the configuration
 func updateForwarders(w http.ResponseWriter, r *http.Request) (err error) {
 	if r.Method != "PUT" {
 		return trace.BadParameter("invalid HTTP method: %v", r.Method)
@@ -29,69 +29,24 @@ func updateForwarders(w http.ResponseWriter, r *http.Request) (err error) {
 		return trace.Wrap(err)
 	}
 
-	var namespace string
-	if namespace = os.Getenv("POD_NAMESPACE"); namespace == "" {
-		namespace = "kube-system"
-	}
-
-	log.Infof("forwarder configuration update: %v", forwarders)
-
-	f, err := ioutil.TempFile("/tmp", "configmap")
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	defer func() {
-		f.Close()
-		os.Remove(f.Name())
-	}()
-
-	var config = struct {
-		Namespace  string
-		Forwarders []forwarder
-	}{
-		Namespace:  namespace,
-		Forwarders: forwarders,
-	}
-	if err = configTemplate.Execute(io.MultiWriter(os.Stdout, f), &config); err != nil {
-		return trace.Wrap(err)
-	}
-
-	var out []byte
-	if out, err = kubectlCmd("apply", "-f", f.Name()); err != nil {
-		log.Errorf("failed to apply ConfigMap:\n%s", out)
-		return trace.Wrap(err, "failed to apply ConfigMap:\n%s", out)
-	}
-
-	namespaceFlag := fmt.Sprintf("--namespace=%v", namespace)
-	// Restart the log collector by deleting the collector pod
-	if out, err = kubectlCmd("get", "po", namespaceFlag, "-l=role=log-collector",
-		`--output=jsonpath={range .items[*]}{.metadata.name}{","}{end}`); err != nil {
-		return trace.Wrap(err, "failed to find log collector pods: %s", out)
-	}
-	podNames := bytes.Split(out, []byte{','})
-	for _, podName := range podNames {
-		podName = bytes.TrimSpace(podName)
-		if len(podName) == 0 {
-			continue
-		}
-		if out, err = kubectlCmd("delete", "po", string(podName), namespaceFlag); err != nil {
-			return trace.Wrap(err, "failed to delete pod %s:\n%s", podName, out)
-		}
-	}
-	if err = retryWithAbort(retryInterval, retryAttempts, func() (bool, error) {
-		out, err = kubectlCmd("get", "rc", "-l=name=log-collector", namespaceFlag,
-			"--output=jsonpath={.items[*].status.replicas}")
+	// TODO: remove pervious configuration files
+	for _, forwarder := range forwarders {
+		f, err := os.Create(forwarderPath(forwarder))
 		if err != nil {
-			return false, trace.Wrap(err, "failed to query rc status: %s", out)
+			return trace.Wrap(err)
 		}
-		if !bytes.Equal(bytes.TrimSpace(out), []byte{'1'}) {
-			log.Infof("rc status invalid, expected replicas=1, got `%s`", out)
-			return false, nil
+		err = configTemplate.Execute(io.MultiWriter(os.Stdout, f), forwarder)
+		f.Close()
+		if err != nil {
+			return trace.Wrap(err)
 		}
-		return true, nil
-	}); err != nil {
-		return trace.Wrap(err, "failed to wait on rc completion condition")
 	}
+
+	// Reload rsyslogd
+	if out, err := exec.Command("/etc/init.d/rsyslog", "restart").CombinedOutput(); err != nil {
+		return trace.Wrap(err, "failed to restart rsyslogd: %s", out)
+	}
+
 	log.Infof("forwarder configuration updated")
 	return nil
 }
@@ -108,8 +63,9 @@ type forwarder struct {
 	Protocol string `json:"protocol"`
 }
 
-func forwarderName(forwarder forwarder) string {
-	return strings.Replace(forwarder.HostPort, ":", "", -1)
+func forwarderPath(forwarder forwarder) string {
+	name := fmt.Sprintf("%v.conf", strings.Replace(forwarder.HostPort, ":", "_", -1))
+	return filepath.Join("/etc/rsyslog.d", name)
 }
 
 func forwarderProtocol(forwarder forwarder) string {
@@ -123,19 +79,10 @@ func forwarderProtocol(forwarder forwarder) string {
 	}
 }
 
-var forwarderFuncs = template.FuncMap{
-	"forwarderName":     forwarderName,
-	"forwarderProtocol": forwarderProtocol,
-}
+var forwarderFuncs = template.FuncMap{"protocol": forwarderProtocol}
 
-var configTemplate = template.Must(template.New("forwarder").Funcs(forwarderFuncs).Parse(`
-kind: ConfigMap
-apiVersion: v1
-metadata:
-  name: extra-log-collector-config
-  namespace: {{ .Namespace }}
-data:{{range .Forwarders}}
-  {{forwarderName .}}.conf: "*.* {{forwarderProtocol .}}{{.HostPort}}"{{end}}
+var configTemplate = template.Must(template.New("forwarder").Funcs(forwarderFuncs).
+	Parse(`*.* {{protocol .}}{{.HostPort}}
 `))
 
 func readJSON(r *http.Request, data interface{}) error {
@@ -147,23 +94,4 @@ func readJSON(r *http.Request, data interface{}) error {
 		return trace.BadParameter("invalid request: %v", err)
 	}
 	return nil
-}
-
-const retryInterval = 5 * time.Second
-const retryAttempts = 50
-
-func retryWithAbort(period time.Duration, attempts int, fn func() (bool, error)) (err error) {
-	for i := 1; i <= attempts; i += 1 {
-		var succeeded bool
-		if succeeded, err = fn(); succeeded {
-			return nil
-		} else if err == nil {
-			log.Infof("unsuccessfull attempt:%v, retry in %v", trace.UserMessage(err), period)
-			time.Sleep(period)
-			continue
-		}
-		break
-	}
-	log.Errorf("all attempts failed:\n%v", trace.DebugReport(err))
-	return trace.Wrap(err)
 }
