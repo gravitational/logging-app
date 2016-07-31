@@ -17,40 +17,34 @@ func main() {
 	log.SetLevel(log.InfoLevel)
 	flag.Parse()
 
-	if *targetDir == "" {
-		log.Fatalln("target directory is required")
-	}
-	if len(watchDirs) == 0 {
-		log.Fatalln("at least one watch directory is required")
-	}
-	var err error
-	*targetDir, err = filepath.Abs(*targetDir)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	log.Infof("symlinking logs in %v", *targetDir)
-	log.Infof("watching %v", watchDirs)
 	if err := run(); err != nil {
 		log.Fatalln(trace.DebugReport(err))
 	}
 }
 
-func run() error {
+func run() (err error) {
+	if *targetDir == "" {
+		return trace.BadParameter("target directory is required")
+	}
+	if len(watchDirs) == 0 {
+		return trace.BadParameter("at least one watch directory is required")
+	}
+	*targetDir, err = filepath.Abs(*targetDir)
+	if err != nil {
+		return trace.Wrap(err, "failed to convert %v to absolute path", *targetDir)
+	}
+	if err = os.MkdirAll(*targetDir, sharedAccessMask); err != nil {
+		return trace.Wrap(err, "failed to created directory `%v`", *targetDir)
+	}
+	log.Infof("symlinking logs in %v", *targetDir)
+	log.Infof("watching %v", watchDirs)
 	if err := createSymlinks(*targetDir, watchDirs); err != nil {
 		return trace.Wrap(err, "failed to create symlinks")
 	}
 
-	watcher, err := inotify.NewWatcher()
+	watcher, err := createWatches(watchDirs)
 	if err != nil {
-		return trace.Wrap(err, "failed to create inotify watcher")
-	}
-
-	watchMask := inotify.IN_CREATE | inotify.IN_MOVED_TO | inotify.IN_MOVED_FROM | inotify.IN_DELETE
-	for _, watchDir := range watchDirs {
-		err = watcher.AddWatch(watchDir, watchMask)
-		if err != nil {
-			return trace.Wrap(err, "failed to create inotify watcher for %v", watchDir)
-		}
+		return trace.Wrap(err)
 	}
 
 	interrupt := make(chan os.Signal)
@@ -62,7 +56,7 @@ L:
 		select {
 		case ev := <-watcher.Event:
 			log.Infof("inotify update for %v", ev)
-			// Changed file (new or deleted), see if it requires symlinking
+			// Changed file - see if it requires symlinking
 			if err = updateSymlinkIfNeeded(*targetDir, ev.Name); err != nil {
 				log.Warningf("failed to symlink %v: %v", ev.Name, err)
 			}
@@ -76,6 +70,21 @@ L:
 
 	watcher.Close()
 	return trace.Wrap(errWatch)
+}
+
+func createWatches(dirs []string) (*inotify.Watcher, error) {
+	watcher, err := inotify.NewWatcher()
+	if err != nil {
+		return nil, trace.Wrap(err, "failed to create inotify watcher")
+	}
+
+	for _, dir := range dirs {
+		err = watcher.AddWatch(dir, watchMask)
+		if err != nil {
+			return nil, trace.Wrap(err, "failed to configure inotify watch for %v", dir)
+		}
+	}
+	return watcher, nil
 }
 
 func createSymlinks(targetDir string, dirs []string) error {
@@ -111,10 +120,12 @@ func updateSymlinkIfNeeded(targetDir, path string) (err error) {
 	symlinkFile := logSymlink(targetDir, path)
 	_, err = os.Stat(path)
 	if os.IsNotExist(err) {
+		log.Infof("original log file %v removed, will remove the symlink %v", path, symlinkFile)
 		return trace.Wrap(os.Remove(symlinkFile))
 	}
 	_, err = os.Lstat(symlinkFile)
 	if os.IsNotExist(err) {
+		log.Infof("new log file %v, will symlink as %v", path, symlinkFile)
 		return trace.Wrap(os.Symlink(path, symlinkFile))
 	}
 	return nil
@@ -155,6 +166,13 @@ func (r *directories) Set(dir string) error {
 	*r = append(*r, dir)
 	return nil
 }
+
+// watchMask defines a mask used to describe the events which inotify will send notifications for
+const watchMask = inotify.IN_CREATE | inotify.IN_MOVED_TO | inotify.IN_MOVED_FROM | inotify.IN_DELETE
+
+// sharedAccessMask defines the file access mask that the target directory is created with
+// should it not exist prior to start
+const sharedAccessMask = 0755
 
 const (
 	// EnvPodName names the pod
