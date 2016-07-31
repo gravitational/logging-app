@@ -1,0 +1,9 @@
+# This resource exists to expose the log-linker container image to gravity app import
+apiVersion: v1
+kind: Pod
+metadata:
+  name: loglink
+spec:
+  containers:
+  - name: nginx
+    image: quay.io/gravitational/log-linker:0.0.7
