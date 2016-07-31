@@ -6,4 +6,4 @@ metadata:
 spec:
   containers:
   - name: nginx
-    image: quay.io/gravitational/log-linker:0.0.7
+    image: log-linker:latest
