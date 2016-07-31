@@ -54,7 +54,7 @@ If the query is ill-formed or does not contain any sub-filters (i.e. arbitrary s
 The log forwarder management endpoint handles a PUT request with a JSON-encoded list of external forwarders
 to configure:
 ```shell
-$ curl -H "Content-Type: application/json" -X PUT -d '[{"host_port":"my.example.com:514","protocol":"tcp"},{"host_port":"your.example.com:514", "protocol":"udp"}]' http://localhost:8083/forwarders
+$ curl -H "Content-Type: application/json" -X PUT -d '[{"address":"my.example.com:514","protocol":"tcp"},{"address":"your.example.com:514", "protocol":"udp"}]' http://localhost:8083/v1/forwarders
 ```
 
 ## Additional configuration
