@@ -17,8 +17,8 @@ func main() {
 		filePath = flag.Args()[0]
 	}
 
-	http.Handle("/ws", makeHandler(serveWs))
-	http.Handle("/forwarders", makeHandler(updateForwarders))
+	http.Handle("/v1/ws", makeHandler(serveWs))
+	http.Handle("/v1/forwarders", makeHandler(updateForwarders))
 
 	log.Infof("listening on %v", *addr)
 	log.Fatalln(http.ListenAndServe(*addr, nil))

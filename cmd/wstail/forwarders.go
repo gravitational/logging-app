@@ -75,11 +75,11 @@ const rsyslogConfigDir = "/etc/rsyslog.d"
 const rsyslogInitScript = "/etc/init.d/rsyslog"
 
 func config(forwarder forwarders.Forwarder) string {
-	return fmt.Sprintf("*.* %v%v", protocol(forwarder), forwarder.HostPort)
+	return fmt.Sprintf("*.* %v%v", protocol(forwarder), forwarder.Addr)
 }
 
 func path(forwarder forwarders.Forwarder) string {
-	name := fmt.Sprintf("%v.conf", strings.Replace(forwarder.HostPort, ":", "_", -1))
+	name := fmt.Sprintf("%v.conf", strings.Replace(forwarder.Addr, ":", "_", -1))
 	return filepath.Join("/etc/rsyslog.d", name)
 }
 
