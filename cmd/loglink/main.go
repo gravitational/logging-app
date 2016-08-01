@@ -118,7 +118,7 @@ func updateSymlinkIfNeeded(targetDir, path string) (err error) {
 		return trace.Wrap(err)
 	}
 	symlinkFile := logSymlink(targetDir, path)
-	_, err = os.Stat(path)
+	_, err = os.Lstat(path)
 	if os.IsNotExist(err) {
 		log.Infof("original log file %v removed, will remove the symlink %v", path, symlinkFile)
 		if err = os.Remove(symlinkFile); err != nil && os.IsNotExist(err) {
