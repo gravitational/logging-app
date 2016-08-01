@@ -1,5 +1,4 @@
 files:
-  - /var/log/gravity/**/*.log
   - /var/log/gravity/*.log
   - /var/log/containers/*.log
 destination:

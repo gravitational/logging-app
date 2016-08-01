@@ -99,11 +99,6 @@ func createSymlinks(targetDir string, dirs []string) error {
 			if info.IsDir() {
 				return filepath.SkipDir
 			}
-			ext := filepath.Ext(path)
-			if ext != ".log" {
-				// Skip files that do not match the log file mask
-				return nil
-			}
 			return updateSymlinkIfNeeded(targetDir, path)
 		}); err != nil {
 			return trace.Wrap(err)
@@ -113,6 +108,11 @@ func createSymlinks(targetDir string, dirs []string) error {
 }
 
 func updateSymlinkIfNeeded(targetDir, path string) (err error) {
+	ext := filepath.Ext(path)
+	if ext != ".log" {
+		// Skip files that do not match the log file mask
+		return nil
+	}
 	path, err = filepath.Abs(path)
 	if err != nil {
 		return trace.Wrap(err)
@@ -121,7 +121,10 @@ func updateSymlinkIfNeeded(targetDir, path string) (err error) {
 	_, err = os.Stat(path)
 	if os.IsNotExist(err) {
 		log.Infof("original log file %v removed, will remove the symlink %v", path, symlinkFile)
-		return trace.Wrap(os.Remove(symlinkFile))
+		if err = os.Remove(symlinkFile); err != nil && os.IsNotExist(err) {
+			err = nil
+		}
+		return trace.Wrap(err)
 	}
 	_, err = os.Lstat(symlinkFile)
 	if os.IsNotExist(err) {
