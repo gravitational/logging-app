@@ -40,6 +40,7 @@ func parseQuery(r io.Reader) (filter filter, err error) {
 		}
 		filter.containers = append(filter.containers, terms["container"]...)
 		filter.pods = append(filter.pods, terms["pod"]...)
+		filter.files = append(filter.files, terms["file"]...)
 	}
 	if len(errors) > 0 {
 		return filter, trace.NewAggregate(errors...)
@@ -50,6 +51,7 @@ func parseQuery(r io.Reader) (filter filter, err error) {
 type filter struct {
 	containers []string
 	pods       []string
+	files      []string
 	// freeText defines the part of the filter with unstructured text
 	freeText string
 }
