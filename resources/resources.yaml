@@ -58,21 +58,14 @@ spec:
             - name: tcp
               protocol: TCP
               containerPort: 514
-          volumeMounts:
-            - name: varlog
-              mountPath: /var/log
-            - name: extra-log-collector-config
-              mountPath: /etc/rsyslog.d
-        - name: log-tail
-          image: log-tailer:latest
-          imagePullPolicy: Always
-          ports:
             - name: web-tail
               protocol: TCP
               containerPort: 8083
           volumeMounts:
             - name: varlog
               mountPath: /var/log
+            - name: extra-log-collector-config
+              mountPath: /etc/rsyslog.d
       volumes:
         - name: extra-log-collector-config
           configMap:
@@ -113,4 +106,3 @@ spec:
         - name: extdockercontainers
           hostPath:
             path: /ext/docker/containers
-

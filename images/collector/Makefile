@@ -6,6 +6,7 @@ OUT=/targetdir/wstail
 all: $(OUT)
 
 $(OUT): $(shell find $$GOPATH/src/github.com/gravitational/logging-app/cmd/wstail -type f)
+$(OUT): $(shell find $$GOPATH/src/github.com/gravitational/logging-app/lib -type f)
 $(OUT): /assets/Makefile
 $(OUT):
 	@echo "\n---> Building $@\n"
