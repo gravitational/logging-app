@@ -14,8 +14,8 @@ The biggest drawback is that it only works with docker logging. If an applicatio
 builtin solution available.
 Following are possible options to enable the capture of file-based logs:
 
-  1. Have application log to stdout/stderr instead (not always possible as it relies on application to have support for this)
-  1. Symlink log files as /dev/stdout (not always possible, especially when log files are symlinks themselves)
+  1. Have application log to stdout/stderr instead (not always possible as it requires support from the application)
+  1. Symlink log files as `/dev/stdout` (not always possible, especially when log files are symlinks themselves)
   1. Adapt the application container to have a `tail` process in the background transparently propagating log files to stdout/stderr (maybe considered too invasive, does not maintain proper separation of concerns available when logging into multiple files)
   1. Have a helper container take care of routing the log files in the required form to `log-forwarder`
 
