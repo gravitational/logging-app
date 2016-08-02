@@ -5,12 +5,13 @@ export
 
 COLLECTOR_TAG := log-collector:$(VERSION)
 FORWARDER_TAG := log-forwarder:$(VERSION)
-CONTAINERS := $(COLLECTOR_TAG) $(FORWARDER_TAG)
+LOGLINKER_TAG := log-linker:$(VERSION)
+CONTAINERS := $(COLLECTOR_TAG) $(FORWARDER_TAG) $(LOGLINKER_TAG)
 
 REPO_URL ?= quay.io/gravitational
 
 .PHONY: all
-all: collector forwarder
+all: collector forwarder loglinker
 
 .PHONY: collector
 collector: collector-build
@@ -36,6 +37,18 @@ forwarder-build:
 forwarder-clean:
 	$(MAKE) -C $(PWD)/forwarder clean
 
+.PHONY: loglinker
+loglinker: loglinker-build
+	docker build --pull -t $(LOGLINKER_TAG) loglinker
+
+.PHONY: loglinker-build
+loglinker-build:
+	$(MAKE) -C $(PWD)/loglinker -e TARGET=loglinker TARGETDIR=loglinker -f $(PWD)/buildbox.mk
+
+.PHONY: loglinker-clean
+loglinkerer-clean:
+	$(MAKE) -C $(PWD)/loglinker clean
+
 .PHONY: deploy
 deploy:
 	$(foreach ct,$(CONTAINERS), \
@@ -43,4 +56,4 @@ deploy:
 		docker push $(REPO_URL)/$(ct) ; )
 
 .PHONY: clean
-clean: collector-clean forwarder-clean
+clean: collector-clean forwarder-clean loglinker-clean
