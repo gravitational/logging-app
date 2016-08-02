@@ -34,7 +34,7 @@ func run() (err error) {
 		return trace.Wrap(err, "failed to convert %v to absolute path", *targetDir)
 	}
 	if err = os.MkdirAll(*targetDir, sharedAccessMask); err != nil {
-		return trace.Wrap(err, "failed to created directory `%v`", *targetDir)
+		return trace.Wrap(err, "failed to create directory `%v`", *targetDir)
 	}
 	log.Infof("symlinking logs in %v", *targetDir)
 	log.Infof("watching %v", watchDirs)
@@ -81,6 +81,7 @@ func createWatches(dirs []string) (*inotify.Watcher, error) {
 	for _, dir := range dirs {
 		err = watcher.AddWatch(dir, watchMask)
 		if err != nil {
+			watcher.Close()
 			return nil, trace.Wrap(err, "failed to configure inotify watch for %v", dir)
 		}
 	}

@@ -5,5 +5,5 @@ metadata:
   name: loglink
 spec:
   containers:
-  - name: nginx
+  - name: log-linker
     image: log-linker:latest
