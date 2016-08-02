@@ -8,7 +8,7 @@ kubelet encodes metadata into log file names by symlinking the original docker l
 It uses the following naming scheme:
 
   ```
-  <pod-name>_<pod_namespace>_<container-name>-<docker-ID>.log
+  <pod-name>_<pod-namespace>_<container-name>-<docker-ID>.log
   ```
 The biggest drawback is that it only works with docker logging. If an application is logging into a file - there is no
 builtin solution available.
