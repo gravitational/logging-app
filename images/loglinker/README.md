@@ -19,11 +19,15 @@ Following are possible options to enable the capture of file-based logs:
   1. Adapt the application container to have a `tail` process in the background transparently propagating log files to stdout/stderr (maybe considered too invasive, does not maintain proper separation of concerns available when logging into multiple files)
   1. Have a helper container take care of routing the log files in the required form to `log-forwarder`
 
+### Log-link container
+
 `log-link` container implements the last option - it is a side-car container that can be hooked up to any application
 to route logs to `log-forwarder` in the form that makes them available for searching and filtering.
 
 It works by sweeping the configured directories for existing log files, symlinking them in the output directory
 (the directory from which `log-forwarder` pod will consume them) employing the same naming scheme as the kubelet.
+
+### Configuration example: nginx
 
 As an example, let's configure `nginx` for file logging:
 
