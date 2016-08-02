@@ -25,38 +25,63 @@ to route logs to `log-forwarder` in the form that makes them available for searc
 It works by sweeping the configured directories for existing log files, symlinking them in the output directory
 (the directory from which `log-forwarder` pod will consume them) employing the same naming scheme as the kubelet.
 
+As an example, let's configure `nginx` for file logging:
+
+```Dockerfile
+FROM nginx
+
+ADD nginx.dockerfile /Dockerfile
+COPY nginx.conf /etc/nginx/nginx.conf
+```
+
+nginx.conf:
+
+```
+daemon off;
+error_log /var/log/gravity/nginx/error.log;
+
+http {
+  access_log /var/log/gravity/nginx/access.log;
+}
+```
+
+And hook it up with the `log-link` container:
 ```yaml
-containers:
-- name: log-linker
-  image: log-linker:0.0.7
-  imagePullPolicy: Always
-  args:
-    # /loglink
-    - -target-dir=/var/log/gravity
-    - -watch-dir=/var/log/gravity/app-directory
-  volumeMounts:
-    - name: log
-      mountPath: /var/log/gravity/app-directory
-    - name: output
-      mountPath: /var/log/gravity
-  env:
-    - name: POD_NAME
-      valueFrom:
-        fieldRef:
-          fieldPath: metadata.name
-    - name: POD_NAMESPACE
-      valueFrom:
-        fieldRef:
-          fieldPath: metadata.namespace
-    - name: CONTAINER_NAME
-      value: app-name
-volumes:
-- name: log
-  hostPath:
-    path: /var/log/gravity/app-directory
-- name: output
-  hostPath:
-    path: /var/log/gravity
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.9
+    ports:
+    - containerPort: 80
+  - name: log-linker
+    image: log-linker:latest
+    imagePullPolicy: Always
+    args:
+      # /loglink
+      - -target-dir=/var/log/gravity
+      - -watch-dir=/var/log/gravity/nginx
+    volumeMounts:
+      - name: log
+        mountPath: /var/log/gravity
+    env:
+      - name: POD_NAME
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.name
+      - name: POD_NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
+      - name: CONTAINER_NAME
+        value: nginx
+  volumes:
+  - name: log
+    hostPath:
+      path: /var/log/gravity
 ```
 
 Note the importance of configuring the minimal kubernetes metadata (pod name/namespace/container name tuple) for this to work.
@@ -64,15 +89,14 @@ Note the importance of configuring the minimal kubernetes metadata (pod name/nam
 The suggested directory structure is:
 ```
 /var/lib/gravity
-├── pod1_namespace1_container-logfile1.log
-├── pod1_namespace1_container-logfile2.log
-└── app-directory
-      ├── logfile1.log
-      └── logfile2.log
+├── nginx-a73bf_default_nginx-access.log
+├── nginx-a73bf_default_nginx-error.log
+└── nginx
+      ├── access.log
+      └── error.log
 
 ```
 with `/var/lib/gravity` serving as a collector for logs where they will be picked up by `log-forwarder`.
-Both `logfile1.log` and `logfile2.log` are symlinked as `pod1_namespace1_container-logfile1.log` and
-`pod1_namespace1_container-logfile2.log` assuming the application runs in a pod `pod1` in the 
-namespace `namspace1` in container `container`.
+
+Both `access.log` and `error.log` are symlinked as `nginx-a73bf_default_nginx-access.log` and `nginx_a73bf_default_nginx-error.log` assuming the application runs in a pod `nginx-a73bf` in the namespace `default` in container `nginx`.
 
