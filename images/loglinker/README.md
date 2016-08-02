@@ -26,6 +26,7 @@ to route logs to `log-forwarder` in the form that makes them available for searc
 
 It works by sweeping the configured directories for existing log files, symlinking them in the output directory
 (the directory from which `log-forwarder` pod will consume them) employing the same naming scheme as the kubelet.
+It then starts watching the specified directories for changes - creating or removing symlinks as necessary.
 
 ### Configuration example: nginx
 
