@@ -1,4 +1,4 @@
-export VERSION := 0.0.9
+export VERSION := $(shell git describe --tags --abbrev=0)
 REPOSITORY := gravitational.io
 NAME := logging-app
 OPS_URL ?= https://opscenter.localhost.localdomain:33009
