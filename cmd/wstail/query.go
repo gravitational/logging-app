@@ -4,18 +4,18 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"io"
 	"strconv"
 	"strings"
 	"text/scanner"
+	"unicode"
 
 	"github.com/gravitational/trace"
 )
 
 // parseQuery interprets the specified reader as a query string and
 // splits it into parts for each search component
-func parseQuery(r io.Reader) (filter filter, err error) {
-	s := bufio.NewScanner(r)
+func parseQuery(input []byte) (filter filter, err error) {
+	s := bufio.NewScanner(bytes.NewReader(input))
 	s.Split(bufio.ScanLines)
 	terms := map[string][]string{}
 	var errors []error
@@ -26,6 +26,7 @@ func parseQuery(r io.Reader) (filter filter, err error) {
 		}
 		p := &parser{}
 		p.scanner.Init(strings.NewReader(line))
+		p.scanner.IsIdentRune = isIdentRune
 		p.next()
 		for p.token != scanner.EOF && len(p.errors) == 0 {
 			term := p.parseTerm()
@@ -43,9 +44,19 @@ func parseQuery(r io.Reader) (filter filter, err error) {
 		filter.files = append(filter.files, terms["file"]...)
 	}
 	if len(errors) > 0 {
+		filter.freeText = string(input)
 		return filter, trace.NewAggregate(errors...)
 	}
 	return filter, nil
+}
+
+// isIdentRune defines the identifier syntax as accepted by this parser
+func isIdentRune(r rune, i int) bool {
+	if unicode.IsLetter(r) || unicode.IsDigit(r) {
+		// Accept digits even in the first position
+		return true
+	}
+	return r == '_' || r == '-' || r == '.'
 }
 
 type filter struct {

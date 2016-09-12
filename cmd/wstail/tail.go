@@ -264,10 +264,9 @@ func serveWs(w http.ResponseWriter, r *http.Request) (err error) {
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	filter, err := parseQuery(bytes.NewReader(data))
+	filter, err := parseQuery(data)
 	if err != nil {
 		log.Infof("unable to parse query %s: %v", data, err)
-		filter.freeText = string(data)
 	}
 
 	go tailer(ws, filter)
