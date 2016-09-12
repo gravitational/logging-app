@@ -42,13 +42,11 @@ receiving the frames with actual log messages until it chooses to close the conn
 for the client to properly terminate the connection as tailing service depends on the close event to 
 release resources used for this service.
 
-Implemented query syntax supports filtering on `containers`, `pods` and, in the future, by log file name:
+Implemented query syntax supports filtering on `containers`, `pods` and `file` names:
 
 ```
-container:mycontainer and pod:"my-app-pod-1fbc6"
+container:mycontainer and pod:my-app-pod-1fbc6 and file:demo.log
 ```
-Note that the parser does not support dashes `-` in entity names, therefore the name of the pod is quoted.
-
 If the query is ill-formed or does not contain any sub-filters (i.e. arbitrary search query) - it is used verbatim.
 
 The log forwarder management endpoint handles a PUT request with a JSON-encoded list of external forwarders
