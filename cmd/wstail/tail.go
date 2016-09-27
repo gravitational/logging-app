@@ -3,10 +3,12 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
 	"syscall"
 	"time"
@@ -271,6 +273,26 @@ func serveWs(w http.ResponseWriter, r *http.Request) (err error) {
 
 	go tailer(ws, filter)
 	return nil
+}
+
+// downloadLogs serves /v1/download
+//
+// it compresses the file with aggregated logs and pushes it to the response
+// stream
+func downloadLogs(w http.ResponseWriter, r *http.Request) error {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	defer file.Close()
+
+	gzWriter := gzip.NewWriter(w)
+	defer gzWriter.Close()
+
+	w.Header().Set("Content-Disposition", "attachment; filename=logs.gz")
+
+	_, err = io.Copy(gzWriter, file)
+	return trace.Wrap(err)
 }
 
 var upgrader = websocket.Upgrader{
