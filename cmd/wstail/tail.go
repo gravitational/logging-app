@@ -1,15 +1,19 @@
 package main
 
 import (
+	"archive/tar"
 	"bufio"
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -277,21 +281,52 @@ func serveWs(w http.ResponseWriter, r *http.Request) (err error) {
 
 // downloadLogs serves /v1/download
 //
-// it compresses the file with aggregated logs and pushes it to the response
-// stream
+// it creates a gzipped tarball with all logs found in the configured filePath
 func downloadLogs(w http.ResponseWriter, r *http.Request) error {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	defer file.Close()
+	dir, file := filepath.Split(filePath)
 
 	gzWriter := gzip.NewWriter(w)
 	defer gzWriter.Close()
 
-	w.Header().Set("Content-Disposition", "attachment; filename=logs.gz")
+	tarWriter := tar.NewWriter(gzWriter)
+	defer tarWriter.Close()
 
-	_, err = io.Copy(gzWriter, file)
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if !strings.HasPrefix(info.Name(), file) {
+			return nil
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		fileBytes, err := ioutil.ReadFile(path)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+
+		header, err := tar.FileInfoHeader(info, "")
+		if err != nil {
+			return trace.Wrap(err)
+		}
+
+		err = tarWriter.WriteHeader(header)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+
+		_, err = tarWriter.Write(fileBytes)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	w.Header().Set("Content-Disposition", "attachment; filename=logs.tar.gz")
 	return trace.Wrap(err)
 }
 
