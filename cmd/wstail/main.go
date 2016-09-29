@@ -18,6 +18,7 @@ func main() {
 	}
 
 	http.Handle("/v1/ws", makeHandler(serveWs))
+	http.Handle("/v1/download", makeHandler(downloadLogs))
 	http.Handle("/v1/forwarders", makeHandler(updateForwarders))
 
 	log.Infof("listening on %v", *addr)
