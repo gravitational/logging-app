@@ -50,7 +50,6 @@ spec:
       containers:
         - name: log-collector
           image: log-collector:latest
-          imagePullPolicy: Always
           ports:
             - name: udp
               protocol: UDP
@@ -88,7 +87,6 @@ spec:
       containers:
         - name: log-forwarder
           image: log-forwarder:latest
-          imagePullPolicy: Always
           volumeMounts:
             - name: gravitylog
               mountPath: /var/log/gravity

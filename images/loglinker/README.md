@@ -64,7 +64,6 @@ spec:
     - containerPort: 80
   - name: log-linker
     image: log-linker:latest
-    imagePullPolicy: Always
     args:
       # /loglink
       - -target-dir=/var/log/gravity
