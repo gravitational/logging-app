@@ -75,7 +75,7 @@ func tailer(ws *websocket.Conn, filter filter) {
 					if truncAt > maxDumpLen {
 						truncAt = maxDumpLen
 					}
-					log.Infof("failed to unmarshal `%v`: %v", message[:truncAt], err)
+					log.Infof("failed to unmarshal `%v...`: %v", message[:truncAt], err)
 					// Use the message as-is
 				}
 			}
