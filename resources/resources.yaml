@@ -94,6 +94,30 @@ spec:
               mountPath: /var/log/containers
             - name: extdockercontainers
               mountPath: /ext/docker/containers
+          livenessProbe:
+            httpGet:
+              path: /readyz
+              port: 8082
+              scheme: HTTP
+            initialDelaySeconds: 10
+            timeoutSeconds: 30
+        - name: healthz
+          image: gcr.io/google_containers/exechealthz-amd64:1.0
+          resources:
+            # keep request = limit to keep this container in guaranteed class
+            limits:
+              cpu: 10m
+              memory: 20Mi
+            requests:
+              cpu: 10m
+              memory: 20Mi
+          args:
+            - -cmd=nslookup log-collector.kube-system.svc.cluster.local | tail -n1 | awk '{printf "%s:514", $3}' | xargs -0 -I addr timeout -t 30 telnet addr
+            - -port=8082
+            - -quiet
+          ports:
+            - containerPort: 8082
+              protocol: TCP
       volumes:
         - name: gravitylog
           hostPath:

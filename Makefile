@@ -26,7 +26,7 @@ deploy:
 import: package
 	-$(GRAVITY) app delete --ops-url=$(OPS_URL) $(REPOSITORY)/$(NAME):$(VERSION) \
 		--force --insecure
-	$(GRAVITY) app import --debug --insecure --vendor \
+	$(GRAVITY) app import --insecure --vendor \
 		--ops-url=$(OPS_URL) \
 		$(UPDATE_IMAGE_OPTS) \
 		$(UPDATE_METADATA_OPTS) \

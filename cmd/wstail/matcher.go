@@ -38,7 +38,13 @@ func buildMatcher(filter filter) string {
 	for _, podName := range pods {
 		podMatchers = append(podMatchers, fmt.Sprintf(`%v_%v_%v`, podName, podNamespace, containerFileMatcher))
 	}
-	return matchPrefix + matchWhitespace + "(" + strings.Join(podMatchers, "|") + ")"
+	capture := []string{"(" + strings.Join(podMatchers, "|") + ")"}
+	// In case of a file filter, also consider files outside of k8s context
+	for _, file := range filter.files {
+		capture = append(capture, file)
+	}
+
+	return matchPrefix + matchWhitespace + strings.Join(capture, "|")
 }
 
 // Matchers
