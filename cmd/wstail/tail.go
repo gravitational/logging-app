@@ -37,6 +37,7 @@ func tailer(ws *websocket.Conn, filter filter) {
 	rotated, err := collectRotatedMessages()
 	if err != nil {
 		log.Errorf("failed to read a list of rotated log files: %v", err)
+		return
 	}
 	files := append(rotated, "-f", filePath)
 	args := append([]string{"-c", "+1"}, files...)
