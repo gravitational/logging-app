@@ -6,13 +6,14 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -24,23 +25,24 @@ import (
 
 const defaultTailSource = "/var/log/messages"
 
-// tailHistory defines the number of lines to output
-const tailHistory = 100
+// maxDumpLen defines the maximum size of the string window to output
+// to console after a failed interpretation (as in failure to decode JSON)
+const maxDumpLen = 128
 
 func tailer(ws *websocket.Conn, filter filter) {
 	matcher := buildMatcher(filter)
 	log.Infof("active filter: %v (%v)", filter, matcher)
 	defer ws.Close()
 
-	var err error
-	var history io.ReadCloser
-	tailCmd := exec.Command("tail", "-f", filePath)
+	rotated, err := collectRotatedMessages()
+	if err != nil {
+		log.Errorf("failed to read a list of rotated log files: %v", err)
+	}
+	files := append(rotated, "-f", filePath)
+	args := append([]string{"-c", "+1"}, files...)
+	tailCmd := exec.Command("tail", args...)
 	commands := []*exec.Cmd{tailCmd}
 	if matcher != "" {
-		history, err = snapshot(matcher, filePath, tailHistory)
-		if err != nil {
-			log.Warningf("failed to obtain history for %v: %v", matcher, trace.DebugReport(err))
-		}
 		// --line-buffered is not supported in busybox
 		// grepCmd := exec.Command("grep", "--line-buffered", "-E", matcher)
 		grepCmd := exec.Command("grep", "-E", matcher)
@@ -53,7 +55,7 @@ func tailer(ws *websocket.Conn, filter filter) {
 	}
 	defer pipe.Close()
 
-	messageC := newMessagePump(pipe, history)
+	messageC := newMessagePump(pipe)
 	closeNotifierC := newCloseNotifierLoop(ws)
 
 	var errDisconnected error
@@ -64,11 +66,17 @@ func tailer(ws *websocket.Conn, filter filter) {
 			return
 		case message := <-messageC:
 			var dockerMessage dockerLogMessage
-			if err = json.Unmarshal([]byte(message), &dockerMessage); err == nil {
-				message = dockerMessage.Log
-			} else {
-				log.Infof("failed to unmarshal `%v`: %v", message, err)
-				// Use the message as-is
+			if len(message) > 0 && message[0] == '{' {
+				if err = json.Unmarshal([]byte(message), &dockerMessage); err == nil {
+					message = dockerMessage.Log
+				} else {
+					truncAt := len(message)
+					if truncAt > maxDumpLen {
+						truncAt = maxDumpLen
+					}
+					log.Infof("failed to unmarshal `%v`: %v", message[:truncAt], err)
+					// Use the message as-is
+				}
 			}
 			var payload = struct {
 				Type    string `json:"type"`
@@ -117,19 +125,19 @@ func newCloseNotifierLoop(ws *websocket.Conn) chan struct{} {
 
 // newMessagePump spawns a goroutine to handle messages from the tailing process group.
 // Returns a channel where the received messages are sent to.
-func newMessagePump(r io.Reader, history io.ReadCloser) chan string {
+func newMessagePump(r io.Reader) chan string {
 	// Log message format:
+	//
+	// Kubernetes context (files forwarded from /var/log/containers):
 	// <timestamp> <log-forwader-pod> <kubernetes-logfile-reference> <JSON-encoded-log-message>
+	// Arbitrary log files:
+	// <timestamp> <log-forwader-pod> <filename>.log <text>
 	// Since the output of this loop is the log message alone, skip this many
 	// columns to only output the relevant detail
 	const columnsToSkip = 3
 
 	messageC := make(chan string)
 	go func() {
-		if history != nil {
-			r = io.MultiReader(&autoClosingReader{history}, r)
-		}
-
 		s := bufio.NewScanner(r)
 		s.Split(bufio.ScanLines)
 		for s.Scan() {
@@ -166,19 +174,6 @@ func (r *autoClosingReader) Read(p []byte) (n int, err error) {
 		r.ReadCloser.Close()
 	}
 	return n, err
-}
-
-// snapshot takes a snapshot of up to tailHistory last lines of logging history
-// for the specified matcher
-func snapshot(matcher, filePath string, tailHistory int) (io.ReadCloser, error) {
-	log.Infof("requesting history for %v", matcher)
-	grepCmd := exec.Command("grep", "-E", matcher, filePath)
-	tailCmd := exec.Command("tail", fmt.Sprintf("-n%v", tailHistory))
-	pipe, err := pipeCommands(grepCmd, tailCmd)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	return pipe, nil
 }
 
 func pipeCommands(commands ...*exec.Cmd) (group *processGroup, err error) {
@@ -330,6 +325,48 @@ func downloadLogs(w http.ResponseWriter, r *http.Request) error {
 	return trace.Wrap(err)
 }
 
+func collectRotatedMessages() ([]string, error) {
+	dir := filepath.Dir(defaultTailSource)
+	f, err := os.Open(dir)
+	if err != nil {
+		return nil, trace.Wrap(err, "failed to read directory `%v`", dir)
+	}
+	names, err := f.Readdirnames(-1)
+	if err != nil {
+		return nil, trace.Wrap(err, "failed to read directory `%v`", dir)
+	}
+
+	var messages []string
+	for _, name := range names {
+		if strings.HasPrefix(filepath.Base(name), "messages.") {
+			messages = append(messages, filepath.Join(dir, name))
+		}
+	}
+	sort.Sort(naturalSortOrder(messages))
+	log.Infof("rotated log files: %#v", messages)
+	return messages, nil
+}
+
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
+}
+
+// naturalSortOrder defines a sort helper to sort filenames in
+// the natural order of their extensions which are assumed to
+// be numeric
+type naturalSortOrder []string
+
+func (r naturalSortOrder) Len() int      { return len(r) }
+func (r naturalSortOrder) Swap(i, j int) { r[i], r[j] = r[j], r[i] }
+func (r naturalSortOrder) Less(i, j int) bool {
+	ext := filepath.Ext(r[i])
+	if len(ext) > 0 {
+		i, _ = strconv.Atoi(ext[1:])
+	}
+	ext = filepath.Ext(r[j])
+	if len(ext) > 0 {
+		j, _ = strconv.Atoi(ext[1:])
+	}
+
+	return i < j
 }
