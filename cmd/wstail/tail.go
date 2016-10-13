@@ -40,7 +40,7 @@ func tailer(ws *websocket.Conn, filter filter) {
 		return
 	}
 	files := append(rotated, "-f", filePath)
-	args := append([]string{"-c", "+1"}, files...)
+	args := append([]string{"-n", "+1"}, files...)
 	tailCmd := exec.Command("tail", args...)
 	commands := []*exec.Cmd{tailCmd}
 	if matcher != "" {
@@ -91,6 +91,9 @@ func tailer(ws *websocket.Conn, filter filter) {
 				log.Infof("failed to convert to JSON: %v", err)
 			} else {
 				errDisconnected = ws.WriteMessage(websocket.TextMessage, data)
+				if errDisconnected != nil {
+					log.Infof("break read loop: %v", errDisconnected)
+				}
 			}
 		}
 	}
