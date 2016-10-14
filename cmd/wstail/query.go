@@ -146,6 +146,13 @@ func (r *parser) error(pos scanner.Position, message string) {
 	r.errors = append(r.errors, trace.Errorf("%v: %v", pos, message))
 }
 
+func (r filter) isEmpty() bool {
+	return len(r.containers) == 0 &&
+		len(r.pods) == 0 &&
+		len(r.files) == 0 &&
+		r.freeText == ""
+}
+
 func tokenStrings(tokens []rune) string {
 	var output bytes.Buffer
 	for i, token := range tokens {
