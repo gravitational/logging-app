@@ -13,8 +13,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -31,28 +29,34 @@ const defaultTailSource = "/var/log/messages"
 const maxDumpLen = 128
 
 // tailHistory defines how many last lines will tail output with no filter set
-const tailHistory = 100
+const tailDepth = 100
 
 func tailer(ws *websocket.Conn, filter filter) {
 	matcher := buildMatcher(filter)
 	log.Infof("active filter: %v (%v)", filter, matcher)
 	defer ws.Close()
 
-	rotated, err := collectRotatedMessages()
+	dir := filepath.Dir(defaultTailSource)
+	names, err := readDir(dir)
 	if err != nil {
-		log.Errorf("failed to read a list of rotated log files: %v", err)
+		log.Errorf("failed to read log directory: %v", err)
 		return
 	}
-	files := append(rotated, "-f", filePath)
+	rotated := newRotated(dir, names)
 	outputScope := []string{"-n", "+1"}
 	if filter.isEmpty() {
-		// Limit the output of an empty filter to last tailHistory lines
-		outputScope = []string{"-n", fmt.Sprintf("%v", tailHistory)}
+		// Limit the output of an empty filter to last tailDepth lines
+		outputScope = []string{"-n", fmt.Sprintf("%v", tailDepth)}
 	}
-	args := append(outputScope, files...)
+	args := append(outputScope, filePath)
 	tailCmd := exec.Command("tail", args...)
 	commands := []*exec.Cmd{tailCmd}
+	var history io.ReadCloser
 	if matcher != "" {
+		history, err = snapshot(matcher, rotated)
+		if err != nil {
+			log.Warningf("failed to obtain history for %v: %v", matcher, trace.DebugReport(err))
+		}
 		// --line-buffered is not supported in busybox
 		// grepCmd := exec.Command("grep", "--line-buffered", "-E", matcher)
 		grepCmd := exec.Command("grep", "-E", matcher)
@@ -65,7 +69,7 @@ func tailer(ws *websocket.Conn, filter filter) {
 	}
 	defer pipe.Close()
 
-	messageC := newMessagePump(pipe)
+	messageC := newMessagePump(pipe, history)
 	closeNotifierC := newCloseNotifierLoop(ws)
 
 	var errDisconnected error
@@ -138,7 +142,7 @@ func newCloseNotifierLoop(ws *websocket.Conn) chan struct{} {
 
 // newMessagePump spawns a goroutine to handle messages from the tailing process group.
 // Returns a channel where the received messages are sent to.
-func newMessagePump(r io.Reader) chan string {
+func newMessagePump(r io.Reader, history io.ReadCloser) chan string {
 	// Log message format:
 	//
 	// Kubernetes context (files forwarded from /var/log/containers):
@@ -151,6 +155,10 @@ func newMessagePump(r io.Reader) chan string {
 
 	messageC := make(chan string)
 	go func() {
+		if history != nil {
+			r = io.MultiReader(&autoClosingReader{history}, r)
+		}
+
 		s := bufio.NewScanner(r)
 		s.Split(bufio.ScanLines)
 		for s.Scan() {
@@ -187,6 +195,28 @@ func (r *autoClosingReader) Read(p []byte) (n int, err error) {
 		r.ReadCloser.Close()
 	}
 	return n, err
+}
+
+// snapshot takes a snapshot of history for the specified matcher
+// using rotated as input
+func snapshot(matcher string, rotated rotated) (io.ReadCloser, error) {
+	log.Infof("requesting history for %v", matcher)
+	var commands []*exec.Cmd
+	if len(rotated.Compressed) > 0 {
+		args := append([]string{"-E", matcher}, rotated.Compressed...)
+		commands = append(commands, exec.Command("zgrep", args...))
+	}
+	if rotated.Main != "" {
+		commands = append(commands, exec.Command("grep", "-E", matcher, rotated.Main))
+	}
+	if len(commands) == 0 {
+		return nil, nil
+	}
+	pipe, err := pipeCommands(commands...)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return pipe, nil
 }
 
 func pipeCommands(commands ...*exec.Cmd) (group *processGroup, err error) {
@@ -338,48 +368,19 @@ func downloadLogs(w http.ResponseWriter, r *http.Request) error {
 	return trace.Wrap(err)
 }
 
-func collectRotatedMessages() ([]string, error) {
-	dir := filepath.Dir(defaultTailSource)
+// readDir reads the contents of the directory with the log file(s)
+func readDir(dir string) (names []string, err error) {
 	f, err := os.Open(dir)
 	if err != nil {
 		return nil, trace.Wrap(err, "failed to read directory `%v`", dir)
 	}
-	names, err := f.Readdirnames(-1)
+	names, err = f.Readdirnames(-1)
 	if err != nil {
 		return nil, trace.Wrap(err, "failed to read directory `%v`", dir)
 	}
-
-	var messages []string
-	for _, name := range names {
-		if strings.HasPrefix(filepath.Base(name), "messages.") {
-			messages = append(messages, filepath.Join(dir, name))
-		}
-	}
-	sort.Sort(naturalSortOrder(messages))
-	log.Infof("rotated log files: %#v", messages)
-	return messages, nil
+	return names, nil
 }
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
-}
-
-// naturalSortOrder defines a sort helper to sort filenames in
-// the natural order of their extensions which are assumed to
-// be numeric
-type naturalSortOrder []string
-
-func (r naturalSortOrder) Len() int      { return len(r) }
-func (r naturalSortOrder) Swap(i, j int) { r[i], r[j] = r[j], r[i] }
-func (r naturalSortOrder) Less(i, j int) bool {
-	ext := filepath.Ext(r[i])
-	if len(ext) > 0 {
-		i, _ = strconv.Atoi(ext[1:])
-	}
-	ext = filepath.Ext(r[j])
-	if len(ext) > 0 {
-		j, _ = strconv.Atoi(ext[1:])
-	}
-
-	return i < j
 }
