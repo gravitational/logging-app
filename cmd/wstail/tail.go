@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -29,6 +30,9 @@ const defaultTailSource = "/var/log/messages"
 // to console after a failed interpretation (as in failure to decode JSON)
 const maxDumpLen = 128
 
+// tailHistory defines how many last lines will tail output with no filter set
+const tailHistory = 100
+
 func tailer(ws *websocket.Conn, filter filter) {
 	matcher := buildMatcher(filter)
 	log.Infof("active filter: %v (%v)", filter, matcher)
@@ -40,7 +44,12 @@ func tailer(ws *websocket.Conn, filter filter) {
 		return
 	}
 	files := append(rotated, "-f", filePath)
-	args := append([]string{"-n", "+1"}, files...)
+	outputScope := []string{"-n", "+1"}
+	if filter.isEmpty() {
+		// Limit the output of an empty filter to last tailHistory lines
+		outputScope = []string{"-n", fmt.Sprintf("%v", tailHistory)}
+	}
+	args := append(outputScope, files...)
 	tailCmd := exec.Command("tail", args...)
 	commands := []*exec.Cmd{tailCmd}
 	if matcher != "" {
