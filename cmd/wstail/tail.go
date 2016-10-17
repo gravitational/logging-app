@@ -42,18 +42,25 @@ func tailer(ws *websocket.Conn, filter filter) {
 		log.Errorf("failed to read log directory: %v", err)
 		return
 	}
-	rotated := newRotated(dir, names)
+	rotated := newRotatedLogs(dir, names)
+	log.Infof("rotated logs: %#v", rotated)
 	outputScope := []string{"-n", "+1"}
 	if filter.isEmpty() {
 		// Limit the output of an empty filter to last tailDepth lines
 		outputScope = []string{"-n", fmt.Sprintf("%v", tailDepth)}
 	}
-	args := append(outputScope, filePath)
+	var files []string
+	if rotated.Main != "" {
+		files = append(files, rotated.Main)
+	}
+	files = append(files, "-F", filePath)
+	args := append(outputScope, files...)
 	tailCmd := exec.Command("tail", args...)
 	commands := []*exec.Cmd{tailCmd}
 	var history io.ReadCloser
 	if matcher != "" {
 		history, err = snapshot(matcher, rotated)
+		log.Infof("history pipeline: %s", history)
 		if err != nil {
 			log.Warningf("failed to obtain history for %v: %v", matcher, trace.DebugReport(err))
 		}
@@ -63,6 +70,7 @@ func tailer(ws *websocket.Conn, filter filter) {
 		commands = append(commands, grepCmd)
 	}
 	pipe, err := pipeCommands(commands...)
+	log.Infof("tailing pipeline: %s", pipe)
 	if err != nil {
 		log.Errorf("failed to build a command pipeline: %v", err)
 		return
@@ -199,20 +207,13 @@ func (r *autoClosingReader) Read(p []byte) (n int, err error) {
 
 // snapshot takes a snapshot of history for the specified matcher
 // using rotated as input
-func snapshot(matcher string, rotated rotated) (io.ReadCloser, error) {
-	log.Infof("requesting history for %v", matcher)
-	var commands []*exec.Cmd
-	if len(rotated.Compressed) > 0 {
-		args := append([]string{"-E", matcher}, rotated.Compressed...)
-		commands = append(commands, exec.Command("zgrep", args...))
-	}
-	if rotated.Main != "" {
-		commands = append(commands, exec.Command("grep", "-E", matcher, rotated.Main))
-	}
-	if len(commands) == 0 {
+func snapshot(matcher string, rotated rotatedLogs) (io.ReadCloser, error) {
+	if len(rotated.Compressed) == 0 {
 		return nil, nil
 	}
-	pipe, err := pipeCommands(commands...)
+	args := append([]string{"-E", matcher}, rotated.Compressed...)
+	log.Infof("requesting history for %v", matcher)
+	pipe, err := pipeCommands(exec.Command("zgrep", args...))
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -262,6 +263,14 @@ func (r *processGroup) Close() (err error) {
 	return trace.Wrap(err)
 }
 
+func (r *processGroup) String() string {
+	var cmds []string
+	for _, cmd := range r.commands {
+		cmds = append(cmds, fmt.Sprintf("%v", cmd.Args))
+	}
+	return fmt.Sprintf("[%v]", strings.Join(cmds, ","))
+}
+
 // processTerminateTimeout defines the initial amount of time to wait for process to terminate
 const processTerminateTimeout = 200 * time.Millisecond
 
@@ -271,7 +280,9 @@ func (r *processGroup) terminate() {
 	go func() {
 		for _, cmd := range r.commands {
 			// Await termination of all processes in the group to prevent zombie processes
-			cmd.Wait()
+			if err := cmd.Wait(); err != nil {
+				log.Infof("%v exited with %v", cmd.Path, err)
+			}
 		}
 		terminated <- struct{}{}
 	}()

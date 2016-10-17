@@ -5,13 +5,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-
-	log "github.com/Sirupsen/logrus"
 )
 
-// newRotated creates a new instance of rotated from directory dir
-func newRotated(dir string, names []string) rotated {
-	var logs rotated
+// newRotatedLogs creates a new instance of rotated from directory dir
+func newRotatedLogs(dir string, names []string) rotatedLogs {
+	var logs rotatedLogs
 	for _, name := range names {
 		baseName := filepath.Base(name)
 		if baseName == "messages.0" {
@@ -22,12 +20,11 @@ func newRotated(dir string, names []string) rotated {
 		}
 	}
 	sort.Sort(naturalSortOrder(logs.Compressed))
-	log.Infof("rotated log files: %#v", logs.Compressed)
 	return logs
 }
 
 // rotated defines a set of files managed by savelog command
-type rotated struct {
+type rotatedLogs struct {
 	// Main defines a completed not yet compressed log file
 	Main string
 	// Compressed lists all compressed log files
@@ -61,5 +58,6 @@ func (r naturalSortOrder) Less(i, j int) bool {
 		j, _ = strconv.Atoi(index)
 	}
 
-	return i < j
+	// From old to new
+	return i > j
 }
