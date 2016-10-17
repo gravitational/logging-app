@@ -7,12 +7,12 @@ import (
 	"strings"
 )
 
-// newRotatedLogs creates a new instance of rotated from directory dir
+// newRotatedLogs creates a new instance of rotatedLogs from directory dir
 func newRotatedLogs(dir string, names []string) rotatedLogs {
 	var logs rotatedLogs
 	for _, name := range names {
 		baseName := filepath.Base(name)
-		if baseName == "messages.0" {
+		if baseName == rotatedLogUncompressed {
 			logs.Main = filepath.Join(dir, name)
 		}
 		if strings.HasPrefix(baseName, "messages.") && strings.HasSuffix(baseName, ".gz") {
@@ -23,7 +23,7 @@ func newRotatedLogs(dir string, names []string) rotatedLogs {
 	return logs
 }
 
-// rotated defines a set of files managed by savelog command
+// rotatedLogs defines a set of files managed by savelog command
 type rotatedLogs struct {
 	// Main defines a completed not yet compressed log file
 	Main string
@@ -38,8 +38,14 @@ type rotatedLogs struct {
 // <name>.<index>.<suffix>
 type naturalSortOrder []string
 
-func (r naturalSortOrder) Len() int      { return len(r) }
-func (r naturalSortOrder) Swap(i, j int) { r[i], r[j] = r[j], r[i] }
+func (r naturalSortOrder) Len() int {
+	return len(r)
+}
+
+func (r naturalSortOrder) Swap(i, j int) {
+	r[i], r[j] = r[j], r[i]
+}
+
 func (r naturalSortOrder) Less(i, j int) bool {
 	parts := strings.SplitN(filepath.Base(r[i]), ".", 3)
 	if len(parts) != 3 {

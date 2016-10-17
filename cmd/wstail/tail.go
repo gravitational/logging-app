@@ -28,8 +28,12 @@ const defaultTailSource = "/var/log/messages"
 // to console after a failed interpretation (as in failure to decode JSON)
 const maxDumpLen = 128
 
-// tailHistory defines how many last lines will tail output with no filter set
+// tailDepth defines how many last lines will tail output with no filter set
 const tailDepth = 100
+
+// rotatedLogUncompressed names the first uncompressed (potentially in use)
+// rotated log file as named by savelog
+const rotatedLogUncompressed = "messages.0"
 
 func tailer(ws *websocket.Conn, filter filter) {
 	matcher := buildMatcher(filter)
