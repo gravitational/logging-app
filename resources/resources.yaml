@@ -94,6 +94,8 @@ spec:
               mountPath: /var/log/containers
             - name: extdockercontainers
               mountPath: /ext/docker/containers
+            - name: gravitysite
+              mountPath: /var/lib/gravity/site
       volumes:
         - name: gravitylog
           hostPath:
@@ -104,3 +106,6 @@ spec:
         - name: extdockercontainers
           hostPath:
             path: /ext/docker/containers
+        - name: gravitysite
+          hostPath:
+            path: /var/lib/gravity/site

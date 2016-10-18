@@ -28,8 +28,8 @@ const defaultTailSource = "/var/log/messages"
 // to console after a failed interpretation (as in failure to decode JSON)
 const maxDumpLen = 128
 
-// tailDepth defines how many last lines will tail output with no filter set
-const tailDepth = 100
+// tailMaxDepth defines how many last lines will tail output with no filter set
+const tailMaxDepth = 100
 
 // rotatedLogUncompressed names the first uncompressed (potentially in use)
 // rotated log file as named by savelog
@@ -48,22 +48,26 @@ func tailer(ws *websocket.Conn, filter filter) {
 	}
 	rotated := newRotatedLogs(dir, names)
 	log.Infof("rotated logs: %#v", rotated)
-	outputScope := []string{"-n", "+1"}
+	tailingDepth := []string{"-n", "+1"}
 	if filter.isEmpty() {
-		// Limit the output of an empty filter to last tailDepth lines
-		outputScope = []string{"-n", fmt.Sprintf("%v", tailDepth)}
+		// Limit the output of an empty filter to last tailMaxDepth lines
+		tailingDepth = []string{"-n", fmt.Sprintf("%v", tailMaxDepth)}
 	}
 	var files []string
 	if rotated.Main != "" {
 		files = append(files, rotated.Main)
 	}
 	files = append(files, "-F", filePath)
-	args := append(outputScope, files...)
+	args := append(tailingDepth, files...)
 	tailCmd := exec.Command("tail", args...)
 	commands := []*exec.Cmd{tailCmd}
 	var history io.ReadCloser
 	if matcher != "" {
-		history, err = snapshot(matcher, rotated)
+		historyLimit := -1
+		if filter.isEmpty() {
+			historyLimit = tailMaxDepth
+		}
+		history, err = snapshot(matcher, rotated, historyLimit)
 		log.Infof("history pipeline: %s", history)
 		if err != nil {
 			log.Warningf("failed to obtain history for %v: %v", matcher, trace.DebugReport(err))
@@ -210,14 +214,19 @@ func (r *autoClosingReader) Read(p []byte) (n int, err error) {
 }
 
 // snapshot takes a snapshot of history for the specified matcher
-// using rotated as input
-func snapshot(matcher string, rotated rotatedLogs) (io.ReadCloser, error) {
+// using rotated as input and limits to tailLimit lines of output.
+// With tailLimit == -1, everything is output
+func snapshot(matcher string, rotated rotatedLogs, tailLimit int) (io.ReadCloser, error) {
 	if len(rotated.Compressed) == 0 {
 		return nil, nil
 	}
 	args := append([]string{"-E", matcher}, rotated.Compressed...)
 	log.Infof("requesting history for %v", matcher)
-	pipe, err := pipeCommands(exec.Command("zgrep", args...))
+	commands := []*exec.Cmd{exec.Command("zgrep", args...)}
+	if tailLimit > 0 {
+		commands = append(commands, exec.Command("tail", "-n", fmt.Sprintf("%v", tailLimit)))
+	}
+	pipe, err := pipeCommands(commands...)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
