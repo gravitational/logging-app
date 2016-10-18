@@ -44,14 +44,22 @@ func buildMatcher(filter filter) string {
 		capture = append(capture, file)
 	}
 
-	return matchPrefix + matchWhitespace + strings.Join(capture, "|")
+	// Wrap into brackets to preserve context if file filters are present
+	var suffix string
+	if len(filter.files) > 0 {
+		suffix = "(" + strings.Join(capture, "|") + ")"
+	} else {
+		suffix = strings.Join(capture, "|")
+	}
+
+	return matchPrefix + matchWhitespace + suffix
 }
 
 // Matchers
 const (
-	matchTimestamp       = `[[:digit:]]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[[:digit:]]+Z`
+	matchTimestamp       = `[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+Z`
 	matchWhitespace      = `[[:space:]]+`
-	matchNamePlaceholder = `[a-zA-Z\0-9-]+`
+	matchNamePlaceholder = `[a-zA-Z0-9-]+`
 	matchPlaceholder     = `[^_]+`
 )
 

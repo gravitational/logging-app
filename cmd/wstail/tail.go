@@ -72,9 +72,7 @@ func tailer(ws *websocket.Conn, filter filter) {
 		if err != nil {
 			log.Warningf("failed to obtain history for %v: %v", matcher, trace.DebugReport(err))
 		}
-		// --line-buffered is not supported in busybox
-		// grepCmd := exec.Command("grep", "--line-buffered", "-E", matcher)
-		grepCmd := exec.Command("grep", "-E", matcher)
+		grepCmd := exec.Command("grep", "--line-buffered", "-E", matcher)
 		commands = append(commands, grepCmd)
 	}
 	pipe, err := pipeCommands(commands...)
@@ -220,7 +218,7 @@ func snapshot(matcher string, rotated rotatedLogs, tailLimit int) (io.ReadCloser
 	if len(rotated.Compressed) == 0 {
 		return nil, nil
 	}
-	args := append([]string{"-E", matcher}, rotated.Compressed...)
+	args := append([]string{"--line-buffered", "--no-filename", "-E", matcher}, rotated.Compressed...)
 	log.Infof("requesting history for %v", matcher)
 	commands := []*exec.Cmd{exec.Command("zgrep", args...)}
 	if tailLimit > 0 {

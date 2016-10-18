@@ -29,7 +29,7 @@ func (s *S) TestBuildsMatcher(c *C) {
 			filter: filter{
 				files: []string{"foo-bar.log"},
 			},
-			expected: matchPrefix + matchWhitespace + `([^_]+_[^_]+_([a-zA-Z\0-9-]+-foo-bar.log))|foo-bar.log`,
+			expected: matchPrefix + matchWhitespace + `(([^_]+_[^_]+_([a-zA-Z0-9-]+-foo-bar.log))|foo-bar.log)`,
 			comment:  "matches a file either in pod/container context or alone",
 		},
 	}
