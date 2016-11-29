@@ -6,7 +6,7 @@ OUT ?= $(NAME).tar.gz
 GRAVITY ?= gravity
 UPDATE_IMAGE_OPTS := \
 	--set-image=log-collector:$(VERSION) --set-image=log-forwarder:$(VERSION) \
-	--set-image=log-tailer:$(VERSION) --set-image=log-linker:$(VERSION)  --set-image=log-hook:$(VERSION)
+	--set-image=log-tailer:$(VERSION) --set-image=log-linker:$(VERSION) --set-image=log-hook:$(VERSION)
 UPDATE_METADATA_OPTS := --repository=$(REPOSITORY) --name=$(NAME) --version=$(VERSION)
 
 .PHONY: package
