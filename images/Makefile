@@ -6,12 +6,21 @@ export
 COLLECTOR_TAG := log-collector:$(VERSION)
 FORWARDER_TAG := log-forwarder:$(VERSION)
 LOGLINKER_TAG := log-linker:$(VERSION)
-CONTAINERS := $(COLLECTOR_TAG) $(FORWARDER_TAG) $(LOGLINKER_TAG)
+HOOK_TAG := log-hook:$(VERSION)
+CONTAINERS := $(COLLECTOR_TAG) $(FORWARDER_TAG) $(LOGLINKER_TAG) $(HOOK_TAG)
 
 REPO_URL ?= quay.io/gravitational
 
 .PHONY: all
-all: collector forwarder loglinker
+all: collector forwarder loglinker hook
+
+.PHONY: hook
+hook:
+	$(eval CHANGESET = $(shell echo $$VERSION | sed -e 's/[\.]//g'))
+	if [ -z "$(CHANGESET)" ]; then \
+	  echo "CHANGESET is not set"; exit 1; \
+	fi;
+	docker build --build-arg CHANGESET=log-$(CHANGESET) --pull -t $(HOOK_TAG) hook
 
 .PHONY: collector
 collector: collector-build

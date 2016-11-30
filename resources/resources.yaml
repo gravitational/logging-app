@@ -28,7 +28,7 @@ metadata:
   namespace: kube-system
 ---
 apiVersion: v1
-kind: ReplicationController
+kind: Deployment
 metadata:
   labels:
     role: log-collector
@@ -39,8 +39,9 @@ metadata:
 spec:
   replicas: 1
   selector:
-    role: log-collector
-    version: v1
+    matchLabels:
+      role: log-collector
+      version: v1
   template:
     metadata:
       labels:
