@@ -27,7 +27,7 @@ metadata:
   name: extra-log-collector-config
   namespace: kube-system
 ---
-apiVersion: v1
+apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
   labels:
