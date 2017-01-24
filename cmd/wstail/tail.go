@@ -70,9 +70,11 @@ func tailer(ws *websocket.Conn, filter filter) {
 	}
 	size := float32(f.Size())
 	tailingDepth := []string{"--lines", "+1"}
+	var isTrimmed bool
 	if filter.isEmpty() || size > tailFileSizeLimit {
 		// Limit the output of an empty filter to last tailMaxDepth lines
 		tailingDepth = []string{"--lines", fmt.Sprintf("%v", tailMaxDepth)}
+		isTrimmed = true
 	}
 	args := append(tailingDepth, files...)
 	tailCmd := exec.Command("tail", args...)
@@ -101,6 +103,12 @@ func tailer(ws *websocket.Conn, filter filter) {
 
 	messageC := newMessagePump(pipe, history)
 	closeNotifierC := newCloseNotifierLoop(ws)
+
+	if isTrimmed {
+		go func() {
+			messageC <- fmt.Sprintf("the data set is too large, show %v last lines, please refine your query to narrow the search filter", tailMaxDepth)
+		}()
+	}
 
 	var errDisconnected error
 	for errDisconnected == nil {
