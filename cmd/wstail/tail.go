@@ -35,6 +35,14 @@ const tailMaxDepth = 100
 // rotated log file as named by savelog
 const rotatedLogUncompressed = "messages.0"
 
+const (
+	Byte     = 1.0
+	Kilobyte = 1024 * Byte
+	Megabyte = 1024 * Kilobyte
+)
+
+const tailFileSizeLimit = 1.5 * Megabyte
+
 func tailer(ws *websocket.Conn, filter filter) {
 	matcher := buildMatcher(filter)
 	log.Infof("active filter: %v (%v)", filter, matcher)
@@ -46,18 +54,26 @@ func tailer(ws *websocket.Conn, filter filter) {
 		log.Errorf("failed to read log directory: %v", err)
 		return
 	}
+
 	rotated := newRotatedLogs(dir, names)
 	log.Infof("rotated logs: %#v", rotated)
-	tailingDepth := []string{"-n", "+1"}
-	if filter.isEmpty() {
-		// Limit the output of an empty filter to last tailMaxDepth lines
-		tailingDepth = []string{"-n", fmt.Sprintf("%v", tailMaxDepth)}
-	}
 	var files []string
 	if rotated.Main != "" {
 		files = append(files, rotated.Main)
 	}
-	files = append(files, "-F", filePath)
+	files = append(files, "--follow", filePath)
+
+	f, err := os.Stat(filePath)
+	if err != nil {
+		log.Errorf("cannot get file info for %v: %v", filePath, err)
+		return
+	}
+	size := float32(f.Size())
+	tailingDepth := []string{"--lines", "+1"}
+	if filter.isEmpty() || size > tailFileSizeLimit {
+		// Limit the output of an empty filter to last tailMaxDepth lines
+		tailingDepth = []string{"--lines", fmt.Sprintf("%v", tailMaxDepth)}
+	}
 	args := append(tailingDepth, files...)
 	tailCmd := exec.Command("tail", args...)
 	commands := []*exec.Cmd{tailCmd}
@@ -72,7 +88,7 @@ func tailer(ws *websocket.Conn, filter filter) {
 		if err != nil {
 			log.Warningf("failed to obtain history for %v: %v", matcher, trace.DebugReport(err))
 		}
-		grepCmd := exec.Command("grep", "--line-buffered", "-E", matcher)
+		grepCmd := exec.Command("grep", "--line-buffered", "--extended-regexp", matcher)
 		commands = append(commands, grepCmd)
 	}
 	pipe, err := pipeCommands(commands...)
