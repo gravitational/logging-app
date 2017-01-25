@@ -65,7 +65,7 @@ func tailer(ws *websocket.Conn, filter filter) {
 	}
 	tailingDepth := []string{"--lines", "+1"}
 	var isTrimmed bool
-	if filter.isEmpty() || f != nil && float32(f.Size()) > tailFileSizeLimit {
+	if f != nil && float32(f.Size()) > tailFileSizeLimit {
 		// Limit the output of an empty filter to last tailMaxDepth lines
 		tailingDepth = []string{"--lines", fmt.Sprintf("%v", tailMaxDepth)}
 		isTrimmed = true
