@@ -35,13 +35,8 @@ const tailMaxDepth = 100
 // rotated log file as named by savelog
 const rotatedLogUncompressed = "messages.0"
 
-const (
-	Byte     = 1.0
-	Kilobyte = 1024 * Byte
-	Megabyte = 1024 * Kilobyte
-)
-
-const tailFileSizeLimit = 1.5 * Megabyte
+// hard limit for log file size which is 1.5Mb
+const tailFileSizeLimit = 1.5 * 1024 * 1024
 
 func tailer(ws *websocket.Conn, filter filter) {
 	matcher := buildMatcher(filter)
@@ -61,17 +56,16 @@ func tailer(ws *websocket.Conn, filter filter) {
 	if rotated.Main != "" {
 		files = append(files, rotated.Main)
 	}
-	files = append(files, "--follow", filePath)
+	files = append(files, "--follow", filePath, "--retry")
 
 	f, err := os.Stat(filePath)
-	if err != nil {
+	if err != nil && os.IsExist(err) {
 		log.Errorf("cannot get file info for %v: %v", filePath, err)
 		return
 	}
-	size := float32(f.Size())
 	tailingDepth := []string{"--lines", "+1"}
 	var isTrimmed bool
-	if filter.isEmpty() || size > tailFileSizeLimit {
+	if filter.isEmpty() || f != nil && float32(f.Size()) > tailFileSizeLimit {
 		// Limit the output of an empty filter to last tailMaxDepth lines
 		tailingDepth = []string{"--lines", fmt.Sprintf("%v", tailMaxDepth)}
 		isTrimmed = true
