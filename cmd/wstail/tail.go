@@ -35,6 +35,9 @@ const tailMaxDepth = 100
 // rotated log file as named by savelog
 const rotatedLogUncompressed = "messages.0"
 
+// hard limit for log file size which is 1.5Mb
+const tailFileSizeLimit = 1.5 * 1024 * 1024
+
 func tailer(ws *websocket.Conn, filter filter) {
 	matcher := buildMatcher(filter)
 	log.Infof("active filter: %v (%v)", filter, matcher)
@@ -46,18 +49,27 @@ func tailer(ws *websocket.Conn, filter filter) {
 		log.Errorf("failed to read log directory: %v", err)
 		return
 	}
+
 	rotated := newRotatedLogs(dir, names)
 	log.Infof("rotated logs: %#v", rotated)
-	tailingDepth := []string{"-n", "+1"}
-	if filter.isEmpty() {
-		// Limit the output of an empty filter to last tailMaxDepth lines
-		tailingDepth = []string{"-n", fmt.Sprintf("%v", tailMaxDepth)}
-	}
 	var files []string
 	if rotated.Main != "" {
 		files = append(files, rotated.Main)
 	}
-	files = append(files, "-F", filePath)
+	files = append(files, "--follow", filePath, "--retry")
+
+	f, err := os.Stat(filePath)
+	if err != nil && os.IsExist(err) {
+		log.Errorf("cannot get file info for %v: %v", filePath, err)
+		return
+	}
+	tailingDepth := []string{"--lines", "+1"}
+	var isTrimmed bool
+	if f != nil && float32(f.Size()) > tailFileSizeLimit {
+		// Limit the output of an empty filter to last tailMaxDepth lines
+		tailingDepth = []string{"--lines", fmt.Sprintf("%v", tailMaxDepth)}
+		isTrimmed = true
+	}
 	args := append(tailingDepth, files...)
 	tailCmd := exec.Command("tail", args...)
 	commands := []*exec.Cmd{tailCmd}
@@ -72,7 +84,7 @@ func tailer(ws *websocket.Conn, filter filter) {
 		if err != nil {
 			log.Warningf("failed to obtain history for %v: %v", matcher, trace.DebugReport(err))
 		}
-		grepCmd := exec.Command("grep", "--line-buffered", "-E", matcher)
+		grepCmd := exec.Command("grep", "--line-buffered", "--extended-regexp", matcher)
 		commands = append(commands, grepCmd)
 	}
 	pipe, err := pipeCommands(commands...)
@@ -85,6 +97,12 @@ func tailer(ws *websocket.Conn, filter filter) {
 
 	messageC := newMessagePump(pipe, history)
 	closeNotifierC := newCloseNotifierLoop(ws)
+
+	if isTrimmed {
+		go func() {
+			messageC <- fmt.Sprintf("the data set is too large, show %v last lines, please refine your query to narrow the search filter", tailMaxDepth)
+		}()
+	}
 
 	var errDisconnected error
 	for errDisconnected == nil {

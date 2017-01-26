@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-echo "Assuming changeset from environment: $RIG_CHANGESET"
+echo "Assuming changeset from the envrionment: $RIG_CHANGESET"
 # note that rig does not take explicit changeset ID
 # taking it from the environment variables
 if [ $1 = "update" ]; then
