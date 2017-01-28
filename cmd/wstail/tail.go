@@ -13,135 +13,114 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/gorilla/websocket"
 	"github.com/gravitational/trace"
 )
 
 const defaultTailSource = "/var/log/messages"
 
+// defaultTailLimit defines how many last lines will tail output by default
+const defaultTailLimit = 100
+
 // maxDumpLen defines the maximum size of the string window to output
 // to console after a failed interpretation (as in failure to decode JSON)
 const maxDumpLen = 128
-
-// tailMaxDepth defines how many last lines will tail output with no filter set
-const tailMaxDepth = 100
 
 // rotatedLogUncompressed names the first uncompressed (potentially in use)
 // rotated log file as named by savelog
 const rotatedLogUncompressed = "messages.0"
 
-// hard limit for log file size which is 1.5Mb
-const tailFileSizeLimit = 1.5 * 1024 * 1024
-
-func tailer(ws *websocket.Conn, filter filter) {
-	matcher := buildMatcher(filter)
-	log.Infof("active filter: %v (%v)", filter, matcher)
-	defer ws.Close()
-
+func logReader(filePath string, filter filter, limit string) ([]byte, error) {
 	dir := filepath.Dir(defaultTailSource)
 	names, err := readDir(dir)
 	if err != nil {
-		log.Errorf("failed to read log directory: %v", err)
-		return
+		return nil, trace.Wrap(err, "failed to read log directory: %v")
+	}
+
+	_, err = os.Stat(filePath)
+	if err != nil {
+		return nil, trace.ConvertSystemError(err)
 	}
 
 	rotated := newRotatedLogs(dir, names)
 	log.Infof("rotated logs: %#v", rotated)
-	var files []string
 	if rotated.Main != "" {
-		files = append(files, rotated.Main)
+		filePath = fmt.Sprintf("%v %v", rotated.Main, filePath)
 	}
-	files = append(files, "--follow", filePath, "--retry")
 
-	f, err := os.Stat(filePath)
-	if err != nil && os.IsExist(err) {
-		log.Errorf("cannot get file info for %v: %v", filePath, err)
-		return
+	if limit == "" {
+		limit = strconv.Itoa(defaultTailLimit)
 	}
-	tailingDepth := []string{"--lines", "+1"}
-	var isTrimmed bool
-	if f != nil && float32(f.Size()) > tailFileSizeLimit {
-		// Limit the output of an empty filter to last tailMaxDepth lines
-		tailingDepth = []string{"--lines", fmt.Sprintf("%v", tailMaxDepth)}
-		isTrimmed = true
-	}
-	args := append(tailingDepth, files...)
-	tailCmd := exec.Command("tail", args...)
-	commands := []*exec.Cmd{tailCmd}
+
 	var history io.ReadCloser
-	if matcher != "" {
-		historyLimit := -1
-		if filter.isEmpty() {
-			historyLimit = tailMaxDepth
+	var commands []*exec.Cmd
+	if filter.isEmpty() {
+		commands = []*exec.Cmd{
+			exec.Command("tail", "--lines", limit, filePath),
 		}
-		history, err = snapshot(matcher, rotated, historyLimit)
+	} else {
+		matcher := buildMatcher(filter)
+		log.Infof("active filter: %v (%v)", filter, matcher)
+		history, err = snapshot(matcher, rotated, -1)
 		log.Infof("history pipeline: %s", history)
 		if err != nil {
 			log.Warningf("failed to obtain history for %v: %v", matcher, trace.DebugReport(err))
 		}
-		grepCmd := exec.Command("grep", "--line-buffered", "--extended-regexp", matcher)
-		commands = append(commands, grepCmd)
+		commands = []*exec.Cmd{
+			exec.Command("grep", "--line-buffered", "--extended-regexp", matcher, filePath),
+			exec.Command("tail", "--lines", limit),
+		}
 	}
-	pipe, err := pipeCommands(commands...)
+
+	pipe, err := newProcessGroup(commands...)
 	log.Infof("tailing pipeline: %s", pipe)
 	if err != nil {
-		log.Errorf("failed to build a command pipeline: %v", err)
-		return
+		return nil, trace.Wrap(err, "failed to build a command pipeline")
 	}
 	defer pipe.Close()
 
-	messageC := newMessagePump(pipe, history)
-	closeNotifierC := newCloseNotifierLoop(ws)
-
-	if isTrimmed {
-		go func() {
-			messageC <- fmt.Sprintf("the data set is too large, show %v last lines, please refine your query to narrow the search filter", tailMaxDepth)
-		}()
-	}
-
-	var errDisconnected error
-	for errDisconnected == nil {
-		select {
-		case <-closeNotifierC:
-			log.Infof("client disconnected")
-			return
-		case message := <-messageC:
-			var dockerMessage dockerLogMessage
-			if len(message) > 0 && message[0] == '{' {
-				if err = json.Unmarshal([]byte(message), &dockerMessage); err == nil {
-					message = dockerMessage.Log
-				} else {
-					truncAt := len(message)
-					if truncAt > maxDumpLen {
-						truncAt = maxDumpLen
-					}
-					log.Infof("failed to unmarshal `%v...`: %v", message[:truncAt], err)
-					// Use the message as-is
-				}
-			}
-			var payload = struct {
-				Type    string `json:"type"`
-				Payload string `json:"payload"`
-			}{
-				Type:    "data",
-				Payload: message,
-			}
-
-			if data, err := json.Marshal(&payload); err != nil {
-				log.Infof("failed to convert to JSON: %v", err)
+	var messages []string
+	ch := makeOutputChannel(pipe, history)
+	for message := range ch {
+		var dockerMessage dockerLogMessage
+		if len(message) > 0 && message[0] == '{' {
+			if err = json.Unmarshal([]byte(message), &dockerMessage); err == nil {
+				message = dockerMessage.Log
 			} else {
-				errDisconnected = ws.WriteMessage(websocket.TextMessage, data)
-				if errDisconnected != nil {
-					log.Infof("break read loop: %v", errDisconnected)
+				truncAt := len(message)
+				if truncAt > maxDumpLen {
+					truncAt = maxDumpLen
 				}
+				log.Infof("failed to unmarshal `%v...`: %v", message[:truncAt], err)
+				// Use the message as-is
 			}
 		}
+		var payload = struct {
+			Type    string `json:"type"`
+			Payload string `json:"payload"`
+		}{
+			Type:    "data",
+			Payload: message,
+		}
+
+		data, err := json.Marshal(&payload)
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+		messages = append(messages, string(data))
 	}
+
+	out, err := json.Marshal(messages)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	return out, nil
 }
 
 // dockerLogMessage defines a partial view of the docker message as received from
@@ -151,30 +130,9 @@ type dockerLogMessage struct {
 	Log string `json:"log"`
 }
 
-// newCloseNotifierLoop spawns a goroutine that reads from the client.
-// The loop terminates once a message from the client has been received.
-// The only expected message the close message although the goroutine does not validate this fact.
-// Returns a channel that will be closed if client disconnects.
-func newCloseNotifierLoop(ws *websocket.Conn) chan struct{} {
-	notifierC := make(chan struct{})
-	go func() {
-		var err error
-		for err == nil {
-			var msg []byte
-			_, msg, err = ws.ReadMessage()
-			if err == nil {
-				log.Infof("recv: %s", msg)
-			}
-		}
-		log.Infof("closing connection with %v", err)
-		close(notifierC)
-	}()
-	return notifierC
-}
-
-// newMessagePump spawns a goroutine to handle messages from the tailing process group.
+// makeOutputChannel spawns a goroutine to handle messages from the process group.
 // Returns a channel where the received messages are sent to.
-func newMessagePump(r io.Reader, history io.ReadCloser) chan string {
+func makeOutputChannel(r io.Reader, history io.ReadCloser) chan string {
 	// Log message format:
 	//
 	// Kubernetes context (files forwarded from /var/log/containers):
@@ -185,7 +143,7 @@ func newMessagePump(r io.Reader, history io.ReadCloser) chan string {
 	// columns to only output the relevant detail
 	const columnsToSkip = 3
 
-	messageC := make(chan string)
+	ch := make(chan string)
 	go func() {
 		if history != nil {
 			r = io.MultiReader(&autoClosingReader{history}, r)
@@ -208,11 +166,16 @@ func newMessagePump(r io.Reader, history io.ReadCloser) chan string {
 			// Convert to string to force a copy of the data as scanner.Bytes()
 			// returns a reference to the internal reusable memory buffer
 			// TODO: use a pool of reusable slices
-			messageC <- string(line)
+			ch <- string(line)
 		}
-		log.Infof("closing tail message pump: %v", s.Err())
+		err := s.Err()
+		if err != nil {
+			log.Error(trace.Wrap(err))
+		}
+
+		close(ch)
 	}()
-	return messageC
+	return ch
 }
 
 // autoClosingReader closes the underlined reader when it reaches the end of stream
@@ -242,14 +205,14 @@ func snapshot(matcher string, rotated rotatedLogs, tailLimit int) (io.ReadCloser
 	if tailLimit > 0 {
 		commands = append(commands, exec.Command("tail", "-n", fmt.Sprintf("%v", tailLimit)))
 	}
-	pipe, err := pipeCommands(commands...)
+	pipe, err := newProcessGroup(commands...)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	return pipe, nil
 }
 
-func pipeCommands(commands ...*exec.Cmd) (group *processGroup, err error) {
+func newProcessGroup(commands ...*exec.Cmd) (group *processGroup, err error) {
 	var stdout io.ReadCloser
 	var closers []io.Closer
 	for i, cmd := range commands {
@@ -338,22 +301,21 @@ func (r *processGroup) terminate() {
 	}
 }
 
-func serveWs(w http.ResponseWriter, r *http.Request) (err error) {
-	ws, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		return trace.Wrap(err, "failed to upgrade to websocket protocol")
-	}
+// getLogs serves /v1/log?query=hello&limit=100
+//
+// it dumps all logs filtered by query and cutted to limit in the configured filePath
+// if none of query params was set, dumps file with default limit tailMaxDepth
+func getLogs(w http.ResponseWriter, r *http.Request) (err error) {
+	filePath := r.Context().Value(filePathContextKey).(string)
+	query := r.URL.Query().Get("query")
+	filter, _ := parseQuery([]byte(query))
+	limit := r.URL.Query().Get("limit")
 
-	_, data, err := ws.ReadMessage()
+	resp, err := logReader(filePath, filter, limit)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	filter, err := parseQuery(data)
-	if err != nil {
-		log.Infof("unable to parse query %s: %v", data, err)
-	}
-
-	go tailer(ws, filter)
+	w.Write(resp)
 	return nil
 }
 
@@ -361,6 +323,7 @@ func serveWs(w http.ResponseWriter, r *http.Request) (err error) {
 //
 // it creates a gzipped tarball with all logs found in the configured filePath
 func downloadLogs(w http.ResponseWriter, r *http.Request) error {
+	filePath := r.Context().Value(filePathContextKey).(string)
 	dir, file := filepath.Split(filePath)
 
 	gzWriter := gzip.NewWriter(w)
@@ -419,8 +382,4 @@ func readDir(dir string) (names []string, err error) {
 		return nil, trace.Wrap(err, "failed to read directory `%v`", dir)
 	}
 	return names, nil
-}
-
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
 }
