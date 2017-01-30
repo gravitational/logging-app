@@ -33,8 +33,8 @@ const maxDumpLen = 128
 const tailMaxDepth = 100
 
 // filterMaxDepth defines how many last lines will tail output with filter set
-// 10000 lines is limit which prevents browser overload on big files. Appriximately 1.5Mb
-const filterMaxDepth = 10
+// this limit prevents browser overload on big log files. 10000 lines is approximately 1.5Mb
+const filterMaxDepth = 10000
 
 // rotatedLogUncompressed names the first uncompressed (potentially in use)
 // rotated log file as named by savelog
@@ -57,32 +57,25 @@ func tailer(ws *websocket.Conn, filter filter) {
 		files = fmt.Sprintf("%v %v", rotated.Main, files)
 	}
 
-	var commands []*exec.Cmd
 	var history io.ReadCloser
+	var commands []*exec.Cmd
 	if filter.isEmpty() {
-		// Limit the output of an empty filter to last tailMaxDepth lines
-		tailCmd := exec.Command("tail", "--lines", fmt.Sprintf("%v", tailMaxDepth), "--follow", files, "--retry")
-		commands = []*exec.Cmd{tailCmd}
+		commands = []*exec.Cmd{
+			exec.Command("tail", "--lines", fmt.Sprintf("%v", tailMaxDepth), "--follow", files, "--retry"),
+		}
 	} else {
 		matcher := buildMatcher(filter)
 		log.Infof("active filter: %v (%v)", filter, matcher)
-
-		historyLimit := -1
-		if filter.isEmpty() {
-			historyLimit = tailMaxDepth
-		}
-		history, err = snapshot(matcher, rotated, historyLimit)
+		history, err = snapshot(matcher, rotated, -1)
 		log.Infof("history pipeline: %s", history)
 		if err != nil {
 			log.Warningf("failed to obtain history for %v: %v", matcher, trace.DebugReport(err))
 		}
-
-		grepCmd := exec.Command("grep", "--line-buffered", "--extended-regexp", matcher, files)
-		limitCmd := exec.Command("/bin/sh", "-c", fmt.Sprintf("tail --lines %v; tail --lines 0 --follow %v --retry", filterMaxDepth, files))
-		commands = []*exec.Cmd{grepCmd, limitCmd}
+		commands = []*exec.Cmd{
+			exec.Command("grep", "--line-buffered", "--extended-regexp", matcher, files),
+			exec.Command("/bin/sh", "-c", fmt.Sprintf("tail --lines %v; tail --lines 0 --follow %v --retry", filterMaxDepth, files)),
+		}
 	}
-
-	// TODO если файл есть послать сообщение в канал
 
 	pipe, err := pipeCommands(commands...)
 	log.Infof("tailing pipeline: %s", pipe)
