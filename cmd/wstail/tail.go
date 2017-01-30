@@ -29,18 +29,18 @@ const defaultTailSource = "/var/log/messages"
 const maxDumpLen = 128
 
 // tailMaxDepth defines how many last lines will tail output with no filter set
+// 100 lines usually fits to screen and looks line expected behaviour for user
 const tailMaxDepth = 100
+
+// filterMaxDepth defines how many last lines will tail output with filter set
+// this limit prevents browser overload on big log files. 10000 lines is approximately 1.5Mb
+const filterMaxDepth = 10000
 
 // rotatedLogUncompressed names the first uncompressed (potentially in use)
 // rotated log file as named by savelog
 const rotatedLogUncompressed = "messages.0"
 
-// hard limit for log file size which is 1.5Mb
-const tailFileSizeLimit = 1.5 * 1024 * 1024
-
 func tailer(ws *websocket.Conn, filter filter) {
-	matcher := buildMatcher(filter)
-	log.Infof("active filter: %v (%v)", filter, matcher)
 	defer ws.Close()
 
 	dir := filepath.Dir(defaultTailSource)
@@ -52,41 +52,31 @@ func tailer(ws *websocket.Conn, filter filter) {
 
 	rotated := newRotatedLogs(dir, names)
 	log.Infof("rotated logs: %#v", rotated)
-	var files []string
+	files := filePath
 	if rotated.Main != "" {
-		files = append(files, rotated.Main)
+		files = fmt.Sprintf("%v %v", rotated.Main, files)
 	}
-	files = append(files, "--follow", filePath, "--retry")
 
-	f, err := os.Stat(filePath)
-	if err != nil && os.IsExist(err) {
-		log.Errorf("cannot get file info for %v: %v", filePath, err)
-		return
-	}
-	tailingDepth := []string{"--lines", "+1"}
-	var isTrimmed bool
-	if f != nil && float32(f.Size()) > tailFileSizeLimit {
-		// Limit the output of an empty filter to last tailMaxDepth lines
-		tailingDepth = []string{"--lines", fmt.Sprintf("%v", tailMaxDepth)}
-		isTrimmed = true
-	}
-	args := append(tailingDepth, files...)
-	tailCmd := exec.Command("tail", args...)
-	commands := []*exec.Cmd{tailCmd}
 	var history io.ReadCloser
-	if matcher != "" {
-		historyLimit := -1
-		if filter.isEmpty() {
-			historyLimit = tailMaxDepth
+	var commands []*exec.Cmd
+	if filter.isEmpty() {
+		commands = []*exec.Cmd{
+			exec.Command("tail", "--lines", fmt.Sprintf("%v", tailMaxDepth), "--follow", files, "--retry"),
 		}
-		history, err = snapshot(matcher, rotated, historyLimit)
+	} else {
+		matcher := buildMatcher(filter)
+		log.Infof("active filter: %v (%v)", filter, matcher)
+		history, err = snapshot(matcher, rotated, -1)
 		log.Infof("history pipeline: %s", history)
 		if err != nil {
 			log.Warningf("failed to obtain history for %v: %v", matcher, trace.DebugReport(err))
 		}
-		grepCmd := exec.Command("grep", "--line-buffered", "--extended-regexp", matcher)
-		commands = append(commands, grepCmd)
+		commands = []*exec.Cmd{
+			exec.Command("grep", "--line-buffered", "--extended-regexp", matcher, files),
+			exec.Command("/bin/sh", "-c", fmt.Sprintf("tail --lines %v; tail --lines 0 --follow %v --retry", filterMaxDepth, files)),
+		}
 	}
+
 	pipe, err := pipeCommands(commands...)
 	log.Infof("tailing pipeline: %s", pipe)
 	if err != nil {
@@ -97,12 +87,6 @@ func tailer(ws *websocket.Conn, filter filter) {
 
 	messageC := newMessagePump(pipe, history)
 	closeNotifierC := newCloseNotifierLoop(ws)
-
-	if isTrimmed {
-		go func() {
-			messageC <- fmt.Sprintf("the data set is too large, show %v last lines, please refine your query to narrow the search filter", tailMaxDepth)
-		}()
-	}
 
 	var errDisconnected error
 	for errDisconnected == nil {
