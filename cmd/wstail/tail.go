@@ -22,8 +22,11 @@ import (
 
 const defaultTailSource = "/var/log/messages"
 
-// defaultTailLimit defines how many last lines will tail output by default
+// defaultTailLimit defines how many last lines will tail output by default from logs
 const defaultTailLimit = 100
+
+// defaultTailHistoryLimit defines how many last lines will tail output by default from rotated logs
+const defaultTailHistoryLimit = -1
 
 // maxDumpLen defines the maximum size of the string window to output
 // to console after a failed interpretation (as in failure to decode JSON)
@@ -37,7 +40,7 @@ func logReader(filePath string, filter filter, limit string) ([]byte, error) {
 	dir := filepath.Dir(defaultTailSource)
 	names, err := readDir(dir)
 	if err != nil {
-		return nil, trace.Wrap(err, "failed to read log directory: %v")
+		return nil, trace.Wrap(err, "failed to read log directory: %v", dir)
 	}
 
 	_, err = os.Stat(filePath)
@@ -64,7 +67,7 @@ func logReader(filePath string, filter filter, limit string) ([]byte, error) {
 	} else {
 		matcher := buildMatcher(filter)
 		log.Infof("active filter: %v (%v)", filter, matcher)
-		history, err = snapshot(matcher, rotated, -1)
+		history, err = snapshot(matcher, rotated, defaultTailHistoryLimit)
 		log.Infof("history pipeline: %s", history)
 		if err != nil {
 			log.Warningf("failed to obtain history for %v: %v", matcher, trace.DebugReport(err))
@@ -83,8 +86,8 @@ func logReader(filePath string, filter filter, limit string) ([]byte, error) {
 	defer pipe.Close()
 
 	var messages []string
-	ch := makeOutputChannel(pipe, history)
-	for message := range ch {
+	messageC := newMessagePump(pipe, history)
+	for message := range messageC {
 		var dockerMessage dockerLogMessage
 		if len(message) > 0 && message[0] == '{' {
 			if err = json.Unmarshal([]byte(message), &dockerMessage); err == nil {
@@ -128,9 +131,9 @@ type dockerLogMessage struct {
 	Log string `json:"log"`
 }
 
-// makeOutputChannel spawns a goroutine to handle messages from the process group.
+// newMessagePump spawns a goroutine to handle messages from the process group.
 // Returns a channel where the received messages are sent to.
-func makeOutputChannel(r io.Reader, history io.ReadCloser) chan string {
+func newMessagePump(r io.Reader, history io.ReadCloser) chan string {
 	// Log message format:
 	//
 	// Kubernetes context (files forwarded from /var/log/containers):
@@ -141,7 +144,7 @@ func makeOutputChannel(r io.Reader, history io.ReadCloser) chan string {
 	// columns to only output the relevant detail
 	const columnsToSkip = 3
 
-	ch := make(chan string)
+	messageC := make(chan string)
 	go func() {
 		if history != nil {
 			r = io.MultiReader(&autoClosingReader{history}, r)
@@ -164,16 +167,16 @@ func makeOutputChannel(r io.Reader, history io.ReadCloser) chan string {
 			// Convert to string to force a copy of the data as scanner.Bytes()
 			// returns a reference to the internal reusable memory buffer
 			// TODO: use a pool of reusable slices
-			ch <- string(line)
+			messageC <- string(line)
 		}
 		err := s.Err()
 		if err != nil {
 			log.Error(trace.Wrap(err))
 		}
 
-		close(ch)
+		close(messageC)
 	}()
-	return ch
+	return messageC
 }
 
 // autoClosingReader closes the underlined reader when it reaches the end of stream
@@ -260,10 +263,8 @@ func (r *processGroup) String() string {
 	return fmt.Sprintf("[%v]", strings.Join(cmds, ","))
 }
 
-// getLogs serves /v1/log?query=hello&limit=100
-//
-// it dumps all logs filtered by query and cutted to limit in the configured filePath
-// if none of query params was set, dumps file with default limit tailMaxDepth
+// getLogs executes specified query on the log file(s) configured with filePath and returns filtered output optionally truncated to limit.
+// With no limit set, defaults to defaultTailLimit as a limit
 func getLogs(w http.ResponseWriter, r *http.Request) (err error) {
 	filePath := r.Context().Value(filePathContextKey).(string)
 	query := r.URL.Query().Get("query")

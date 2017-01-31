@@ -47,11 +47,11 @@ func main() {
 		select {
 		case err := <-errChan:
 			if err != nil {
-				log.Fatal(err)
+				trace.DebugReport(err)
 			}
 		case s := <-signalChan:
 			log.Infof("Captured %v. Exiting...", s)
-			os.Exit(0)
+			return
 		}
 	}
 }
