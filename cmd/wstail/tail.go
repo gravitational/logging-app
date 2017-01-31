@@ -15,8 +15,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
-	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
@@ -251,7 +249,6 @@ func (r *processGroup) Close() (err error) {
 	for _, closer := range r.closers {
 		closer.Close()
 	}
-	r.terminate()
 	return trace.Wrap(err)
 }
 
@@ -261,44 +258,6 @@ func (r *processGroup) String() string {
 		cmds = append(cmds, fmt.Sprintf("%v", cmd.Args))
 	}
 	return fmt.Sprintf("[%v]", strings.Join(cmds, ","))
-}
-
-// processTerminateTimeout defines the initial amount of time to wait for process to terminate
-const processTerminateTimeout = 200 * time.Millisecond
-
-func (r *processGroup) terminate() {
-	terminated := make(chan struct{})
-	head := r.commands[0]
-	go func() {
-		for _, cmd := range r.commands {
-			// Await termination of all processes in the group to prevent zombie processes
-			if err := cmd.Wait(); err != nil {
-				log.Infof("%v exited with %v", cmd.Path, err)
-			}
-		}
-		terminated <- struct{}{}
-	}()
-
-	if err := head.Process.Signal(syscall.SIGINT); err != nil {
-		log.Infof("cannot terminate with SIGINT: %v", err)
-	}
-
-	select {
-	case <-terminated:
-		return
-	case <-time.After(processTerminateTimeout):
-	}
-
-	if err := head.Process.Signal(syscall.SIGTERM); err != nil {
-		log.Infof("cannot terminate with SIGTERM: %v", err)
-	}
-
-	select {
-	case <-terminated:
-		return
-	case <-time.After(processTerminateTimeout * 2):
-		head.Process.Kill()
-	}
 }
 
 // getLogs serves /v1/log?query=hello&limit=100
