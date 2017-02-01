@@ -265,8 +265,7 @@ func (r *processGroup) String() string {
 
 // getLogs executes specified query on the log file(s) configured with filePath and returns filtered output optionally truncated to limit.
 // With no limit set, defaults to defaultTailLimit as a limit
-func getLogs(w http.ResponseWriter, r *http.Request) (err error) {
-	filePath := r.Context().Value(filePathContextKey).(string)
+func getLogs(filePath string, w http.ResponseWriter, r *http.Request) (err error) {
 	query := r.URL.Query().Get("query")
 	filter, _ := parseQuery([]byte(query))
 	limit := r.URL.Query().Get("limit")
@@ -282,8 +281,7 @@ func getLogs(w http.ResponseWriter, r *http.Request) (err error) {
 // downloadLogs serves /v1/download
 //
 // it creates a gzipped tarball with all logs found in the configured filePath
-func downloadLogs(w http.ResponseWriter, r *http.Request) error {
-	filePath := r.Context().Value(filePathContextKey).(string)
+func downloadLogs(filePath string, w http.ResponseWriter, r *http.Request) error {
 	dir, file := filepath.Split(filePath)
 
 	gzWriter := gzip.NewWriter(w)

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"net/http"
 	"os"
@@ -11,8 +10,6 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
 )
-
-const filePathContextKey = "filepath"
 
 func main() {
 	log.SetLevel(log.InfoLevel)
@@ -30,8 +27,8 @@ func main() {
 
 	log.Infof("HTTP service listening on %s", *httpAddr)
 
-	http.Handle("/v1/log", withContext(filePathContextKey, filePath, makeHandler(getLogs)))
-	http.Handle("/v1/download", withContext(filePathContextKey, filePath, makeHandler(downloadLogs)))
+	http.Handle("/v1/log", makeHandlerWithFilePath(filePath, getLogs))
+	http.Handle("/v1/download", makeHandlerWithFilePath(filePath, downloadLogs))
 	http.Handle("/v1/forwarders", makeHandler(updateForwarders))
 
 	errChan := make(chan error, 10)
@@ -56,6 +53,10 @@ func main() {
 	}
 }
 
+type handlerFunc func(w http.ResponseWriter, r *http.Request) error
+
+type handlerWithFilePath func(filePath string, w http.ResponseWriter, r *http.Request) error
+
 // makeHandler wraps a handler with http.Handler
 func makeHandler(handler handlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -66,12 +67,11 @@ func makeHandler(handler handlerFunc) http.HandlerFunc {
 	}
 }
 
-type handlerFunc func(w http.ResponseWriter, r *http.Request) error
-
-// withContext is a middleware which allows to put data to request context
-func withContext(key, value interface{}, next http.Handler) http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), key, value)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+func makeHandlerWithFilePath(filePath string, handler handlerWithFilePath) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		err := handler(filePath, w, r)
+		if err != nil {
+			trace.WriteError(w, err)
+		}
+	}
 }
