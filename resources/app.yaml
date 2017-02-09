@@ -1,13 +1,12 @@
-apiVersion: v1
+apiVersion: bundle.gravitational.io/v2
 kind: SystemApplication
 metadata:
-  namespace: kube-system
   name: logging-app
-  repository: gravitational.io
-  resourceVersion: 0.0.4
+  resourceVersion: "0.0.0"
+  namespace: kube-system
 hooks:
   install:
-    spec:
+    job: |
       apiVersion: batch/v1
       kind: Job
       metadata:
@@ -23,7 +22,7 @@ hooks:
                 image: quay.io/gravitational/debian-tall:0.0.1
                 command: ["/usr/local/bin/kubectl", "apply", "-f", "/var/lib/gravity/resources/resources.yaml"]
   update:
-    spec:
+    job: |
       apiVersion: batch/v1
       kind: Job
       metadata:
@@ -42,7 +41,7 @@ hooks:
                 image: log-hook:0.0.1
                 args: ["update"]
   rollback:
-    spec:
+    job: |
       apiVersion: batch/v1
       kind: Job
       metadata:
@@ -61,7 +60,7 @@ hooks:
                 image: log-hook:0.0.1
                 args: ["rollback"]
   uninstall:
-    spec:
+    job: |
       apiVersion: batch/v1
       kind: Job
       metadata:
