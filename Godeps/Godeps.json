@@ -1,7 +1,7 @@
 {
 	"ImportPath": "github.com/gravitational/logging-app",
-	"GoVersion": "go1.6",
-	"GodepVersion": "v74",
+	"GoVersion": "go1.7",
+	"GodepVersion": "v78",
 	"Packages": [
 		"./cmd/...",
 		"./lib/..."
@@ -12,20 +12,15 @@
 			"Comment": "v0.10.0-19-gf3cfb45",
 			"Rev": "f3cfb454f4c209e6668c95216c4744b8fddb2356"
 		},
-		{
-			"ImportPath": "github.com/gorilla/websocket",
-			"Comment": "v1.0.0",
-			"Rev": "1f512fc3f05332ba7117626cdfb4e07474e58e60"
+    {
+			"ImportPath": "github.com/jonboulle/clockwork",
+			"Rev": "ed104f61ea4877bea08af6f759805674861e968d"
 		},
 		{
 			"ImportPath": "github.com/gravitational/trace",
 			"Rev": "eadd167f3bf1293753c317c6a3d76fd275cf8933"
 		},
-		{
-			"ImportPath": "github.com/jonboulle/clockwork",
-			"Rev": "ed104f61ea4877bea08af6f759805674861e968d"
-		},
-		{
+    {
 			"ImportPath": "golang.org/x/exp/inotify",
 			"Rev": "fac9e6d4e3a4bd9d3dd6f47b3c79027a6b64dd0a"
 		},
