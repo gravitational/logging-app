@@ -37,6 +37,7 @@ const maxDumpLen = 128
 const rotatedLogUncompressed = "messages.0"
 
 func logReader(filePath string, filter filter, limit string) ([]byte, error) {
+	paths := []string{filePath}
 	dir := filepath.Dir(defaultTailSource)
 	names, err := readDir(dir)
 	if err != nil {
@@ -51,7 +52,7 @@ func logReader(filePath string, filter filter, limit string) ([]byte, error) {
 	rotated := newRotatedLogs(dir, names)
 	log.Infof("rotated logs: %#v", rotated)
 	if rotated.Main != "" {
-		filePath = fmt.Sprintf("%v %v", rotated.Main, filePath)
+		paths = append([]string{rotated.Main}, filePath)
 	}
 
 	if limit == "" {
@@ -61,9 +62,11 @@ func logReader(filePath string, filter filter, limit string) ([]byte, error) {
 	var history io.ReadCloser
 	var commands []*exec.Cmd
 	if filter.isEmpty() {
-		commands = []*exec.Cmd{
-			exec.Command("tail", "--lines", limit, filePath),
+		tailArgs := []string{"--lines", limit}
+		for _, path := range paths {
+			tailArgs = append(tailArgs, path)
 		}
+		commands = []*exec.Cmd{exec.Command("tail", tailArgs...)}
 	} else {
 		matcher := buildMatcher(filter)
 		log.Infof("active filter: %v (%v)", filter, matcher)
@@ -72,8 +75,12 @@ func logReader(filePath string, filter filter, limit string) ([]byte, error) {
 		if err != nil {
 			log.Warningf("failed to obtain history for %v: %v", matcher, trace.DebugReport(err))
 		}
+		grepArgs := []string{"--line-buffered", "--extended-regexp", matcher}
+		for _, path := range paths {
+			grepArgs = append(grepArgs, path)
+		}
 		commands = []*exec.Cmd{
-			exec.Command("grep", "--line-buffered", "--extended-regexp", matcher, filePath),
+			exec.Command("grep", grepArgs...),
 			exec.Command("tail", "--lines", limit),
 		}
 	}
