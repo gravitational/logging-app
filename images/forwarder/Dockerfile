@@ -7,4 +7,4 @@ RUN chmod +x /usr/local/bin/remote_syslog
 
 RUN test -f /cleanup.sh && sh /cleanup.sh
 
-ENTRYPOINT ["/usr/local/bin/remote_syslog", "--poll", "-D", "-c", "/etc/remote_syslog.yml"]
+ENTRYPOINT ["/usr/local/bin/remote_syslog", "--poll", "-D", "--reopen=false", "-c", "/etc/remote_syslog.yml"]
