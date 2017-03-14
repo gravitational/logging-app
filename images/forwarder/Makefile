@@ -1,7 +1,4 @@
-# We need a version >v0.18 as it contains
-# https://github.com/papertrail/remote_syslog2/pull/174
-# in which remote_syslog2 forwards new files entirely
-override VERSION:=415704611b83856f20431fa495144a011651b6a6
+override VERSION:=f55ba1b5cae7aaf36416f65ce0f1b461a1f4b95e
 GOFLAGS=-installsuffix cgo --ldflags '-w -s' -a
 GOBUILDPREFIX=GOOS=linux GOARCH=amd64 CGO_ENABLED=0
 BASEREPO:=github.com/gravitational
