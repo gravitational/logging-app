@@ -1,4 +1,4 @@
-# Gravity Logging
+# Telekube Logging
 
 This gravity app provides an rsyslog-based log collection system to gravity sites.
 
