@@ -47,6 +47,8 @@ spec:
       labels:
         role: log-collector
         version: v1
+      annotations:
+        seccomp.security.alpha.kubernetes.io/pod: docker/default
     spec:
       containers:
         - name: log-collector
@@ -84,6 +86,8 @@ spec:
     metadata:
       labels:
         name: log-forwarder
+      annotations:
+        seccomp.security.alpha.kubernetes.io/pod: docker/default
     spec:
       containers:
         - name: log-forwarder
