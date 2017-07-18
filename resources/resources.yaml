@@ -50,6 +50,8 @@ spec:
       annotations:
         seccomp.security.alpha.kubernetes.io/pod: docker/default
     spec:
+      securityContext:
+        runAsUser: 0
       containers:
         - name: log-collector
           image: log-collector:latest
@@ -89,6 +91,8 @@ spec:
       annotations:
         seccomp.security.alpha.kubernetes.io/pod: docker/default
     spec:
+      securityContext:
+        runAsUser: 0
       containers:
         - name: log-forwarder
           image: log-forwarder:latest
