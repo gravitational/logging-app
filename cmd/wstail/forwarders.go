@@ -12,8 +12,8 @@ import (
 
 	"github.com/gravitational/logging-app/lib/forwarders"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
+	log "github.com/sirupsen/logrus"
 )
 
 // updateForwarders updates log forwarder configuration and reloads the logging service.
