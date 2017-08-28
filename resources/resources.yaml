@@ -97,21 +97,16 @@ spec:
         - name: log-forwarder
           image: log-forwarder:latest
           volumeMounts:
-            - name: gravitylog
-              mountPath: /var/log/gravity
-            - name: varlogcontainers
-              mountPath: /var/log/containers
+            - name: varlog
+              mountPath: /var/log
             - name: extdockercontainers
               mountPath: /ext/docker/containers
             - name: gravitysite
               mountPath: /var/lib/gravity/site
       volumes:
-        - name: gravitylog
+        - name: varlog
           hostPath:
-            path: /var/log/gravity
-        - name: varlogcontainers
-          hostPath:
-            path: /var/log/containers
+            path: /var/log
         - name: extdockercontainers
           hostPath:
             path: /ext/docker/containers

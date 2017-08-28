@@ -10,8 +10,9 @@ if [ $1 = "update" ]; then
 
     echo "Starting update, changeset: $RIG_CHANGESET"
     rig cs delete --force -c cs/$RIG_CHANGESET
-    echo "Deleting old replication controller rc/log-forwarder"
-    rig delete rc/log-collector --resource-namespace=kube-system --force
+    echo "Deleting old deployments/daemonsets"
+    rig delete deployments/log-collector --resource-namespace=kube-system --force
+    rig delete daemonsets/log-forwarder --resource-namespace=kube-system --force
     echo "Creating or updating resources"
     rig upsert -f /var/lib/gravity/resources/resources.yaml --debug
     echo "Checking status"
