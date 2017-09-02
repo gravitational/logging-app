@@ -13,6 +13,12 @@
   revision = "ed104f61ea4877bea08af6f759805674861e968d"
 
 [[projects]]
+  name = "github.com/julienschmidt/httprouter"
+  packages = ["."]
+  revision = "8c199fb6259ffc1af525cc3ad52ee60ba8359669"
+  version = "v1.1"
+
+[[projects]]
   name = "github.com/sirupsen/logrus"
   packages = ["."]
   revision = "f006c2ac4710855cf0f916dd6b77acf6b048dc6e"
@@ -47,6 +53,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "3c9aa9db8f60f9f7e90e49756475b2d0bbd8dbb6f46d284cea7f4713b8676264"
+  inputs-digest = "f1f2ffda6c05f6a4e43d3121552533dc413e2284a9117fbcc0fdffc1c0567f7d"
   solver-name = "gps-cdcl"
   solver-version = 1

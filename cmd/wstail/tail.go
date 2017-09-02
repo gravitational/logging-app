@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/gravitational/trace"
+	"github.com/julienschmidt/httprouter"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -272,7 +273,7 @@ func (r *processGroup) String() string {
 
 // getLogs executes specified query on the log file(s) configured with filePath and returns filtered output optionally truncated to limit.
 // With no limit set, defaults to defaultTailLimit as a limit
-func getLogs(filePath string, w http.ResponseWriter, r *http.Request) (err error) {
+func getLogs(filePath string, w http.ResponseWriter, r *http.Request, _ httprouter.Params) (err error) {
 	query := r.URL.Query().Get("query")
 	filter, _ := parseQuery([]byte(query))
 	limit := r.URL.Query().Get("limit")
@@ -288,7 +289,7 @@ func getLogs(filePath string, w http.ResponseWriter, r *http.Request) (err error
 // downloadLogs serves /v1/download
 //
 // it creates a gzipped tarball with all logs found in the configured filePath
-func downloadLogs(filePath string, w http.ResponseWriter, r *http.Request) error {
+func downloadLogs(filePath string, w http.ResponseWriter, r *http.Request, _ httprouter.Params) error {
 	dir, file := filepath.Split(filePath)
 
 	gzWriter := gzip.NewWriter(w)

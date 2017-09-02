@@ -13,16 +13,56 @@ import (
 	"github.com/gravitational/logging-app/lib/forwarders"
 
 	"github.com/gravitational/trace"
+	"github.com/julienschmidt/httprouter"
 	log "github.com/sirupsen/logrus"
 )
 
-// updateForwarders updates log forwarder configuration and reloads the logging service.
+func upsertForwarder(w http.ResponseWriter, r *http.Request, p httprouter.Params) error {
+	var forwarder forwarders.Forwarder
+
+	err := readJSON(r, &forwarder)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	err = writeForwarder(forwarder)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	err = reload()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	log.Infof("upserted log forwarder: %v", forwarder)
+	return nil
+}
+
+func deleteForwarder(w http.ResponseWriter, r *http.Request, p httprouter.Params) error {
+	name := p.ByName("name")
+	if name == "" {
+		return trace.BadParameter("log forwarder name is missing")
+	}
+
+	err := os.Remove(path(name))
+	if err != nil {
+		return trace.ConvertSystemError(err)
+	}
+
+	err = reload()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	log.Infof("log forwarder %q removed", name)
+	return nil
+}
+
+// replaceForwarders updates log forwarder configuration and reloads the logging service.
 // It receives new forwarder configuration, updates the configuration and restarts the rsyslog daemon
 // to force it to reload the configuration
-func updateForwarders(w http.ResponseWriter, r *http.Request) (err error) {
-	if r.Method != "PUT" {
-		return trace.BadParameter("invalid HTTP method: %v", r.Method)
-	}
+func replaceForwarders(w http.ResponseWriter, r *http.Request, p httprouter.Params) (err error) {
 	var forwarders []forwarders.Forwarder
 	if err = readJSON(r, &forwarders); err != nil {
 		return trace.Wrap(err)
@@ -47,26 +87,39 @@ func updateForwarders(w http.ResponseWriter, r *http.Request) (err error) {
 
 	// Write new forwarder configuration
 	for _, forwarder := range forwarders {
-		path := path(forwarder)
-		f, err := os.Create(path)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-		_, err = f.WriteString(config(forwarder))
-		if errClose := f.Close(); errClose != nil {
-			log.Warningf("failed to close file %v: %v", path, errClose)
-		}
-		if err != nil {
+		if err := writeForwarder(forwarder); err != nil {
 			return trace.Wrap(err)
 		}
 	}
 
 	// Reload rsyslogd
-	if out, err := exec.Command(rsyslogInitScript, "restart").CombinedOutput(); err != nil {
-		return trace.Wrap(err, "failed to restart rsyslogd: %s", out)
+	err = reload()
+	if err != nil {
+		return trace.Wrap(err)
 	}
 
-	log.Infof("forwarder configuration updated")
+	log.Infof("log forwarder configuration replaced")
+	return nil
+}
+
+func writeForwarder(f forwarders.Forwarder) error {
+	file, err := os.Create(path(f.Addr))
+	if err != nil {
+		return trace.ConvertSystemError(err)
+	}
+	defer file.Close()
+	_, err = file.WriteString(config(f))
+	if err != nil {
+		return trace.ConvertSystemError(err)
+	}
+	return nil
+}
+
+func reload() error {
+	out, err := exec.Command(rsyslogInitScript, "restart").CombinedOutput()
+	if err != nil {
+		return trace.Wrap(err, "failed to restart rsyslogd: %s", out)
+	}
 	return nil
 }
 
@@ -78,9 +131,9 @@ func config(forwarder forwarders.Forwarder) string {
 	return fmt.Sprintf("*.* %v%v", protocol(forwarder), forwarder.Addr)
 }
 
-func path(forwarder forwarders.Forwarder) string {
-	name := fmt.Sprintf("%v.conf", strings.Replace(forwarder.Addr, ":", "_", -1))
-	return filepath.Join("/etc/rsyslog.d", name)
+func path(addr string) string {
+	name := fmt.Sprintf("%v.conf", strings.Replace(addr, ":", "_", -1))
+	return filepath.Join(rsyslogConfigDir, name)
 }
 
 func protocol(forwarder forwarders.Forwarder) string {

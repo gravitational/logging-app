@@ -17,6 +17,10 @@ package:
 forwarder:
 	$(MAKE) -C images forwarder
 
+.PHONY: collector
+collector:
+	$(MAKE) -C images collector
+
 .PHONY: hook
 hook:
 	$(MAKE) -C images hook
