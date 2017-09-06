@@ -15,11 +15,20 @@ import (
 func main() {
 	log.SetLevel(log.InfoLevel)
 
-	var (
-		filePath string
-		httpAddr = flag.String("addr", ":8083", "HTTP service address")
-	)
+	var filePath string
+	var httpAddr = flag.String("addr", ":8083", "HTTP service address")
+	var initForwarders = flag.Bool("init-forwarders", false, "Initialize log forwarders and exit")
+
 	flag.Parse()
+
+	if *initForwarders {
+		err := setupLogForwarders()
+		if err != nil {
+			log.Fatalf("failed to setup log forwarders: %v", trace.DebugReport(err))
+		}
+		return
+	}
+
 	if flag.NArg() < 1 {
 		filePath = defaultTailSource
 	} else {
