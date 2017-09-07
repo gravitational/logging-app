@@ -8,17 +8,28 @@ import (
 	"syscall"
 
 	"github.com/gravitational/trace"
+	"github.com/julienschmidt/httprouter"
 	log "github.com/sirupsen/logrus"
 )
 
 func main() {
 	log.SetLevel(log.InfoLevel)
 
-	var (
-		filePath string
-		httpAddr = flag.String("addr", ":8083", "HTTP service address")
-	)
+	var filePath string
+	var httpAddr = flag.String("addr", ":8083", "HTTP service address")
+	var initForwarders = flag.Bool("init-forwarders", false,
+		"Initialize log forwarders and exit")
+
 	flag.Parse()
+
+	if *initForwarders {
+		err := initLogForwarders()
+		if err != nil {
+			log.Fatalf("failed to setup log forwarders: %v", trace.DebugReport(err))
+		}
+		return
+	}
+
 	if flag.NArg() < 1 {
 		filePath = defaultTailSource
 	} else {
@@ -27,13 +38,13 @@ func main() {
 
 	log.Infof("HTTP service listening on %s", *httpAddr)
 
-	http.Handle("/v1/log", makeHandlerWithFilePath(filePath, getLogs))
-	http.Handle("/v1/download", makeHandlerWithFilePath(filePath, downloadLogs))
-	http.Handle("/v1/forwarders", makeHandler(updateForwarders))
+	router := httprouter.New()
+	router.GET("/v1/log", makeHandlerWithFilePath(filePath, getLogs))
+	router.GET("/v1/download", makeHandlerWithFilePath(filePath, downloadLogs))
 
 	errChan := make(chan error, 10)
 	go func() {
-		errChan <- http.ListenAndServe(*httpAddr, nil)
+		errChan <- http.ListenAndServe(*httpAddr, router)
 	}()
 
 	signalChan := make(chan os.Signal, 1)
@@ -53,23 +64,11 @@ func main() {
 	}
 }
 
-type handlerFunc func(w http.ResponseWriter, r *http.Request) error
+type handlerWithFilePath func(filePath string, w http.ResponseWriter, r *http.Request, p httprouter.Params) error
 
-type handlerWithFilePath func(filePath string, w http.ResponseWriter, r *http.Request) error
-
-// makeHandler wraps a handler with http.Handler
-func makeHandler(handler handlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		err := handler(w, r)
-		if err != nil {
-			trace.WriteError(w, err)
-		}
-	}
-}
-
-func makeHandlerWithFilePath(filePath string, handler handlerWithFilePath) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		err := handler(filePath, w, r)
+func makeHandlerWithFilePath(filePath string, handler handlerWithFilePath) httprouter.Handle {
+	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+		err := handler(filePath, w, r, p)
 		if err != nil {
 			trace.WriteError(w, err)
 		}

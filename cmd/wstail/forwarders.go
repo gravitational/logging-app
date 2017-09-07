@@ -1,106 +1,108 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"net/http"
-	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 
-	"github.com/gravitational/logging-app/lib/forwarders"
-
+	"github.com/ghodss/yaml"
 	"github.com/gravitational/trace"
 	log "github.com/sirupsen/logrus"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/pkg/api"
+	"k8s.io/client-go/rest"
 )
 
-// updateForwarders updates log forwarder configuration and reloads the logging service.
-// It receives new forwarder configuration, updates the configuration and restarts the rsyslog daemon
-// to force it to reload the configuration
-func updateForwarders(w http.ResponseWriter, r *http.Request) (err error) {
-	if r.Method != "PUT" {
-		return trace.BadParameter("invalid HTTP method: %v", r.Method)
-	}
-	var forwarders []forwarders.Forwarder
-	if err = readJSON(r, &forwarders); err != nil {
-		return trace.Wrap(err)
-	}
-
-	// Remove previous forwarder configuration files
-	if err = filepath.Walk(rsyslogConfigDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return trace.Wrap(err)
-		}
-		if path == rsyslogConfigDir {
-			return nil
-		}
-		if info.IsDir() {
-			return filepath.SkipDir
-		}
-		log.Infof("removing %v", path)
-		return trace.Wrap(os.Remove(path), "failed to remove %v", path)
-	}); err != nil {
-		log.Warningf("failed to delete forwarder configuration files: %v", err)
-	}
-
-	// Write new forwarder configuration
-	for _, forwarder := range forwarders {
-		path := path(forwarder)
-		f, err := os.Create(path)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-		_, err = f.WriteString(config(forwarder))
-		if errClose := f.Close(); errClose != nil {
-			log.Warningf("failed to close file %v: %v", path, errClose)
-		}
-		if err != nil {
-			return trace.Wrap(err)
-		}
-	}
-
-	// Reload rsyslogd
-	if out, err := exec.Command(rsyslogInitScript, "restart").CombinedOutput(); err != nil {
-		return trace.Wrap(err, "failed to restart rsyslogd: %s", out)
-	}
-
-	log.Infof("forwarder configuration updated")
-	return nil
-}
-
-const rsyslogConfigDir = "/etc/rsyslog.d"
-
-const rsyslogInitScript = "/etc/init.d/rsyslog"
-
-func config(forwarder forwarders.Forwarder) string {
-	return fmt.Sprintf("*.* %v%v", protocol(forwarder), forwarder.Addr)
-}
-
-func path(forwarder forwarders.Forwarder) string {
-	name := fmt.Sprintf("%v.conf", strings.Replace(forwarder.Addr, ":", "_", -1))
-	return filepath.Join("/etc/rsyslog.d", name)
-}
-
-func protocol(forwarder forwarders.Forwarder) string {
-	switch forwarder.Protocol {
-	case "udp":
-		return "@"
-	case "tcp":
-		return "@@"
-	default:
-		return "@@"
-	}
-}
-
-func readJSON(r *http.Request, data interface{}) error {
-	body, err := ioutil.ReadAll(r.Body)
+// initLogForwarders reads config map that contains log forwarder resources and creates
+// respective rsyslog configuration files
+func initLogForwarders() error {
+	config, err := rest.InClusterConfig()
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	if err := json.Unmarshal(body, &data); err != nil {
-		return trace.BadParameter("invalid request: %v", err)
+
+	client, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return trace.Wrap(err)
 	}
+
+	configMap, err := client.ConfigMaps(api.NamespaceSystem).Get(
+		forwardersConfigMap, metav1.GetOptions{})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	if len(configMap.Data) == 0 {
+		log.Info("no log forwarders configured")
+		return nil
+	}
+
+	for _, data := range configMap.Data {
+		err := initLogForwarder([]byte(data))
+		if err != nil {
+			return trace.Wrap(err)
+		}
+	}
+
 	return nil
 }
+
+// initLogForwarders configures a single log forwarder from data found in config map
+func initLogForwarder(data []byte) error {
+	var forwarder logForwarder
+
+	err := yaml.Unmarshal([]byte(data), &forwarder)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	err = ioutil.WriteFile(
+		forwarderFilename(forwarder),
+		forwarderConfig(forwarder),
+		sharedReadMask)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	log.Infof("configured log forwarder %v", forwarder)
+	return nil
+}
+
+// forwarderFilename returns a full path to log forwarder config file
+func forwarderFilename(forwarder logForwarder) string {
+	return filepath.Join(rsyslogConfigDir, forwarder.Metadata.Name)
+}
+
+// forwarderConfig returns log forwarder rsyslog config
+func forwarderConfig(forwarder logForwarder) []byte {
+	if forwarder.Spec.Protocol == "udp" {
+		return []byte(fmt.Sprintf("*.* @%v", forwarder.Spec.Address))
+	}
+	return []byte(fmt.Sprintf("*.* @@%v", forwarder.Spec.Address))
+}
+
+// logForwarder is the log forwarder spec
+type logForwarder struct {
+	// Metadata is log forwarder metadata
+	Metadata struct {
+		// Name is log forwarder name
+		Name string `json:"name" yaml:"name"`
+	} `json:"metadata" yaml:"metadata"`
+	// Spec defines log forwarder specification
+	Spec struct {
+		// Address is forwarding address
+		Address string `json:"address" yaml:"address"`
+		// Protocol is forwarding protocol
+		Protocol string `json:"protocol,omitempty" yaml:"protocol,omitempty"`
+	} `json:"spec" yaml:"spec"`
+}
+
+const (
+	// forwardersConfigMap is the name of config map with forwarders
+	forwardersConfigMap = "log-forwarders"
+	// rsyslogConfigDir is the directory where forwarder configs are put
+	rsyslogConfigDir = "/etc/rsyslog.d"
+	// sharedReadMask is file mask for rsyslog config files
+	sharedReadMask = 0644
+)
