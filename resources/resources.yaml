@@ -50,11 +50,11 @@ spec:
       annotations:
         seccomp.security.alpha.kubernetes.io/pod: docker/default
     spec:
-     tolerations:
-      - key: level
-        value: gravitational.io/system
-        operator: Equal
-        effect: NoExecute
+      tolerations:
+        - key: "gravitational.io/runlevel"
+          value: system
+          operator: Equal
+          effect: NoExecute
       securityContext:
         runAsUser: 0
       containers:
@@ -96,11 +96,11 @@ spec:
       annotations:
         seccomp.security.alpha.kubernetes.io/pod: docker/default
     spec:
-     tolerations:
-      - key: level
-        value: gravitational.io/system
-        operator: Equal
-        effect: NoExecute
+      tolerations:
+        - key: "gravitational.io/runlevel"
+          value: system
+          operator: Equal
+          effect: NoExecute
       securityContext:
         runAsUser: 0
       containers:
