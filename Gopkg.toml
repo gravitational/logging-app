@@ -24,3 +24,11 @@
 [[constraint]]
   name = "github.com/gravitational/trace"
   version = "1.0.0"
+
+[[constraint]]
+  branch = "release-1.7"
+  name = "k8s.io/apimachinery"
+
+[[constraint]]
+  version = "4.0.0"
+  name = "k8s.io/client-go"

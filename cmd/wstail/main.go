@@ -17,12 +17,13 @@ func main() {
 
 	var filePath string
 	var httpAddr = flag.String("addr", ":8083", "HTTP service address")
-	var initForwarders = flag.Bool("init-forwarders", false, "Initialize log forwarders and exit")
+	var initForwarders = flag.Bool("init-forwarders", false,
+		"Initialize log forwarders and exit")
 
 	flag.Parse()
 
 	if *initForwarders {
-		err := setupLogForwarders()
+		err := initLogForwarders()
 		if err != nil {
 			log.Fatalf("failed to setup log forwarders: %v", trace.DebugReport(err))
 		}

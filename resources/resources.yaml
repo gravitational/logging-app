@@ -24,7 +24,7 @@ spec:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: extra-log-collector-config
+  name: log-forwarders
   namespace: kube-system
 ---
 apiVersion: extensions/v1beta1
@@ -56,6 +56,9 @@ spec:
         - name: init-log-forwarders
           image: log-collector:latest
           command: ["/wstail", "-init-forwarders"]
+          volumeMounts:
+            - name: logforwarders
+              mountPath: /etc/rsyslog.d
       containers:
         - name: log-collector
           image: log-collector:latest
