@@ -10,6 +10,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/pkg/api"
 	"k8s.io/client-go/rest"
 )
 
@@ -26,14 +27,14 @@ func initLogForwarders() error {
 		return trace.Wrap(err)
 	}
 
-	configMap, err := client.ConfigMaps(systemNamespace).Get(
+	configMap, err := client.ConfigMaps(api.NamespaceSystem).Get(
 		forwardersConfigMap, metav1.GetOptions{})
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
 	if len(configMap.Data) == 0 {
-		log.Infof("no log forwarders configured")
+		log.Info("no log forwarders configured")
 		return nil
 	}
 
@@ -59,7 +60,7 @@ func initLogForwarder(data []byte) error {
 	err = ioutil.WriteFile(
 		forwarderFilename(forwarder),
 		forwarderConfig(forwarder),
-		0755)
+		sharedReadMask)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -93,15 +94,15 @@ type logForwarder struct {
 		// Address is forwarding address
 		Address string `json:"address" yaml:"address"`
 		// Protocol is forwarding protocol
-		Protocol string `json:"protocol" yaml:"protocol"`
+		Protocol string `json:"protocol,omitempty" yaml:"protocol,omitempty"`
 	} `json:"spec" yaml:"spec"`
 }
 
 const (
-	// systemNamespace is the Kubernetes system namespace
-	systemNamespace = "kube-system"
 	// forwardersConfigMap is the name of config map with forwarders
 	forwardersConfigMap = "log-forwarders"
 	// rsyslogConfigDir is the directory where forwarder configs are put
 	rsyslogConfigDir = "/etc/rsyslog.d"
+	// sharedReadMask is file mask for rsyslog config files
+	sharedReadMask = 0644
 )
