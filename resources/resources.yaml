@@ -54,7 +54,6 @@ spec:
         - key: "gravitational.io/runlevel"
           value: system
           operator: Equal
-          effect: NoExecute
       securityContext:
         runAsUser: 0
       containers:
@@ -100,7 +99,6 @@ spec:
         - key: "gravitational.io/runlevel"
           value: system
           operator: Equal
-          effect: NoExecute
       securityContext:
         runAsUser: 0
       containers:
