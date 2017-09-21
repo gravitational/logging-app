@@ -50,6 +50,10 @@ spec:
       annotations:
         seccomp.security.alpha.kubernetes.io/pod: docker/default
     spec:
+      tolerations:
+        - key: "gravitational.io/runlevel"
+          value: system
+          operator: Equal
       securityContext:
         runAsUser: 0
       initContainers:
@@ -97,6 +101,10 @@ spec:
       annotations:
         seccomp.security.alpha.kubernetes.io/pod: docker/default
     spec:
+      tolerations:
+        - key: "gravitational.io/runlevel"
+          value: system
+          operator: Equal
       securityContext:
         runAsUser: 0
       containers:
