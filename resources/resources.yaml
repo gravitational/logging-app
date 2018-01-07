@@ -98,6 +98,9 @@ metadata:
   name: log-forwarder
   namespace: kube-system
 spec:
+  selector:
+    matchLabels:
+      name: log-forwarder
   template:
     metadata:
       labels:
