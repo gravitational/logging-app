@@ -14,13 +14,19 @@ import (
 
 func main() {
 	log.SetLevel(log.InfoLevel)
+	log.SetOutput(os.Stderr)
 
 	var filePath string
 	var httpAddr = flag.String("addr", ":8083", "HTTP service address")
+	var debug = flag.Bool("debug", false, "Verbose mode")
 	var initForwarders = flag.Bool("init-forwarders", false,
 		"Initialize log forwarders and exit")
 
 	flag.Parse()
+
+	if *debug {
+		log.SetLevel(log.DebugLevel)
+	}
 
 	if *initForwarders {
 		err := initLogForwarders()
