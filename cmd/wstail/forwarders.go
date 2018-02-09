@@ -1,9 +1,11 @@
 package main
 
 import (
-	"fmt"
+	"bytes"
 	"io/ioutil"
 	"path/filepath"
+	"strings"
+	"text/template"
 
 	"github.com/ghodss/yaml"
 	"github.com/gravitational/trace"
@@ -57,9 +59,14 @@ func initLogForwarder(data []byte) error {
 		return trace.Wrap(err)
 	}
 
+	config, err := forwarderConfig(forwarder)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
 	err = ioutil.WriteFile(
 		forwarderFilename(forwarder),
-		forwarderConfig(forwarder),
+		config,
 		sharedReadMask)
 	if err != nil {
 		return trace.Wrap(err)
@@ -75,11 +82,30 @@ func forwarderFilename(forwarder logForwarder) string {
 }
 
 // forwarderConfig returns log forwarder rsyslog config
-func forwarderConfig(forwarder logForwarder) []byte {
-	if forwarder.Spec.Protocol == "udp" {
-		return []byte(fmt.Sprintf("*.* @%v", forwarder.Spec.Address))
+func forwarderConfig(forwarder logForwarder) ([]byte, error) {
+	host, port := splitHostPort(forwarder.Spec.Address)
+	var buf bytes.Buffer
+	var config = struct {
+		Target, Port, Protocol string
+	}{
+		Target:   host,
+		Port:     port,
+		Protocol: forwarder.Spec.Protocol,
 	}
-	return []byte(fmt.Sprintf("*.* @@%v", forwarder.Spec.Address))
+	err := configTemplate.Execute(&buf, &config)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return buf.Bytes(), nil
+}
+
+// splitHostPort breaks addr into host:port pair
+func splitHostPort(addr string) (host string, port string) {
+	parts := strings.SplitN(addr, ":", 2)
+	if len(parts) == 2 {
+		return parts[0], parts[1]
+	}
+	return parts[0], ""
 }
 
 // logForwarder is the log forwarder spec
@@ -97,6 +123,10 @@ type logForwarder struct {
 		Protocol string `json:"protocol,omitempty" yaml:"protocol,omitempty"`
 	} `json:"spec" yaml:"spec"`
 }
+
+var configTemplate = template.Must(template.New("config").Parse(`
+action(type="omfwd" Target="{{.Target}}" Protocol="{{.Protocol}}" Port="{{.Port}}" Template="LongTagForwardFormat")
+`))
 
 const (
 	// forwardersConfigMap is the name of config map with forwarders
