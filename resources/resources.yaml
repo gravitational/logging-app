@@ -87,10 +87,10 @@ spec:
               mountPath: /etc/rsyslog.d
           resources:
             requests:
-              memory: 100Mi
+              memory: 200Mi
               cpu: 100m
             limits:
-              memory: 200Mi
+              memory: 600Mi
               cpu: 500m
       volumes:
         - name: logforwarders
@@ -137,10 +137,10 @@ spec:
               mountPath: /var/lib/gravity/site
           resources:
             requests:
-              memory: 150Mi
+              memory: 200Mi
               cpu: 100m
             limits:
-              memory: 300Mi
+              memory: 600Mi
               cpu: 500m
       volumes:
         - name: varlog
