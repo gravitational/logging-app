@@ -85,6 +85,13 @@ spec:
               mountPath: /var/log
             - name: logforwarders
               mountPath: /etc/rsyslog.d
+          resources:
+            requests:
+              memory: 200Mi
+              cpu: 100m
+            limits:
+              memory: 600Mi
+              cpu: 500m
       volumes:
         - name: logforwarders
           emptyDir: {}
@@ -128,6 +135,13 @@ spec:
               mountPath: /ext/docker/containers
             - name: gravitysite
               mountPath: /var/lib/gravity/site
+          resources:
+            requests:
+              memory: 200Mi
+              cpu: 100m
+            limits:
+              memory: 600Mi
+              cpu: 500m
       volumes:
         - name: varlog
           hostPath:
