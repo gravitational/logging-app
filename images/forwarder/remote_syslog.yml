@@ -1,9 +1,0 @@
-files:
-  - /var/log/gravity/**/*.log
-  - /var/log/containers/*.log
-  - /var/lib/gravity/site/**/*.log
-destination:
-  host: log-collector.kube-system.svc.cluster.local
-  port: 514
-  protocol: tcp
-new_file_check_interval: "10"

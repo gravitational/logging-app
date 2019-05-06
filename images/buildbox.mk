@@ -17,7 +17,8 @@ override BUILDDIR=$(ASSETS)/build
 # Configuration by convention: use TARGET as a directory name
 BINARIES=$(BUILDDIR)/$(TARGET)
 
-BBOX := quay.io/gravitational/debian-venti:go1.9-stretch
+BBOX := quay.io/gravitational/debian-venti:go1.11.5-stretch
+LAPP := github.com/logrange/logging-app
 
 all: prepare $(BINARIES)
 
@@ -26,8 +27,8 @@ $(BINARIES): buildbox $(ASSETS)/Makefile
 	docker run --rm=true \
 		--volume=$(ASSETS):/assets \
 		--volume=$(BUILDDIR):/targetdir \
-		--volume=$(REPODIR):/gocode/src/github.com/gravitational/logging-app \
-		--volume=$(REPODIR):/gopath/src/github.com/gravitational/logging-app \
+		--volume=$(REPODIR):/gocode/src/${LAPP} \
+		--volume=$(REPODIR):/gopath/src/${LAPP} \
 		--env="TARGETDIR=/targetdir" \
 		$(BBOX) \
 		make -f /assets/Makefile

@@ -1,0 +1,124 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lr-aggregator
+  namespace: kube-system
+  labels:
+    app: lr-aggregator
+spec:
+  type: ClusterIP
+  ports:
+    - name: rpc
+      protocol: TCP
+      port: 9966
+  selector:
+    app: lr-aggregator
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lr-aggregator
+  namespace: kube-system
+  labels:
+    app: lr-aggregator
+data:
+  logrange.json: |
+    {
+      "HostHostId": 0,
+      "HostLeaseTTLSec": 5,
+      "HostRegisterTimeoutSec": 0,
+      "PublicApiRpc": {
+        "ListenAddr": "0.0.0.0:9966",
+        "TlsEnabled": false,
+        "Tls2Way": false,
+        "TlsCertFile": "/opt/logrange/config/tls/server.crt",
+        "TlsKeyFile": "/opt/logrange/config/tls/server.key",
+        "TlsCAFile": "/opt/logrange/config/tls/ca.pem"
+      },
+      "JrnlCtrlConfig": {
+        "JournalsDir": "/var/lib/logrange/db/",
+        "MaxOpenFileDescs": 500,
+        "CheckFullScan": false,
+        "RecoverDisabled": false,
+        "RecoverLostDataOk": false,
+        "WriteIdleSec": 120,
+        "WriteFlushMs": 500,
+        "MaxChunkSize": 5000000,
+        "MaxRecordSize": 1048576
+      },
+      "PipesConfig": {
+        "EnsureAtStart": [
+          {
+            "Name": "__default__"
+          }
+        ]
+      }
+    }
+
+  log4g.properties: |
+    # log4g configuration`
+
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: lr-aggregator
+  namespace: kube-system
+  labels:
+    app: lr-aggregator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lr-aggregator
+  template:
+    metadata:
+      labels:
+        app: lr-aggregator
+      annotations:
+        seccomp.security.alpha.kubernetes.io/pod: docker/default
+
+    spec:
+      securityContext:
+        runAsUser: 0
+      containers:
+        - name: lr-aggregator
+          image: "index.docker.io/logrange/logrange:v0.0.4"
+          imagePullPolicy: Always
+          ports:
+            - name: rpc
+              protocol: TCP
+              containerPort: 9966
+          volumeMounts:
+            - name: config
+              mountPath: /opt/logrange/config
+            - name: extdockercontainers
+              mountPath: /ext/docker/containers
+            - name: varlib
+              mountPath: /var/lib
+            - name: varlog
+              mountPath: /var/log
+      volumes:
+        - name: config
+          configMap:
+            name: lr-aggregator
+        - name: extdockercontainers
+          hostPath:
+            path: /ext/docker/containers
+        - name: varlib
+          hostPath:
+            path: /var/lib
+        - name: varlog
+          hostPath:
+            path: /var/log
+
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - preference:
+                matchExpressions:
+                  - key: logrange.io/node
+                    operator: Exists
+              weight: 100
