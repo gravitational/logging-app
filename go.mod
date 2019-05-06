@@ -1,4 +1,4 @@
-module github.com/logrange/gravity
+module github.com/gravitational/logging-app
 
 go 1.11
 

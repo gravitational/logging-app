@@ -18,7 +18,7 @@ override BUILDDIR=$(ASSETS)/build
 BINARIES=$(BUILDDIR)/$(TARGET)
 
 BBOX := quay.io/gravitational/debian-venti:go1.11.5-stretch
-LAPP := github.com/logrange/logging-app
+LAPP := github.com/gravitational/logging-app
 
 all: prepare $(BINARIES)
 

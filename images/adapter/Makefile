@@ -5,11 +5,11 @@ OUT=/targetdir/adapter
 .PHONY: all
 all: $(OUT)
 
-$(OUT): $(shell find $$GOPATH/src/github.com/logrange/logging-app/cmd/adapter -type f)
+$(OUT): $(shell find $$GOPATH/src/github.com/gravitational/logging-app/cmd/adapter -type f)
 $(OUT): /assets/Makefile
 $(OUT):
 	@echo "\n---> Building $@\n"
-	$(GOBUILDPREFIX) go build -o $@ $(GOFLAGS) github.com/logrange/logging-app/cmd/adapter
+	$(GOBUILDPREFIX) go build -o $@ $(GOFLAGS) github.com/gravitational/logging-app/cmd/adapter
 
 .PHONY: clean
 clean:

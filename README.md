@@ -45,9 +45,9 @@ Job that runs preconfigured queries by schedule. In particular it is used to kee
 **Run commands in order:**<br/>
 
  1. Clone repo:<br/>
- `git clone git@github.com:logrange/gravity.git`
- 2. Enter gravity directory:<br/>
- `cd gravity`
+ `git clone git@github.com:gravitational/logging-app.git`
+ 2. Enter logging-app directory:<br/>
+ `cd logging-app`
  3. Build Gravity package (specify `OPS_URL` and `VERSION` as needed):<br/>
  `OPS_URL= VERSION=x.x.x make clean tarball`
 
