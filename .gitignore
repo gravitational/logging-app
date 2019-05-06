@@ -1,26 +1,4 @@
 .DS_Store
 
-.classpath
-.metadata
-.project
-.settings
 .idea/
-
-target/
-bin/
-binaries/
-
-*.iml
-*.ipr
-*.iws
-
-*.py[co]
-*.egg
-*.egg-info
-
-*.o
-*.obj
-*.so
-*.dylib
-*.out
-*.test
+*.swp
