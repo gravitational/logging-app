@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package query
 
 import (
 	"bytes"
@@ -26,6 +26,11 @@ import (
 )
 
 type (
+	// Represents parsed 'Gravity log query'
+	query struct {
+		Exp *expression `@@`
+	}
+
 	condition struct {
 		Key   string `@("POD"|"CONTAINER"|"FILE") ":"`
 		Value string `@(String|Ident)`
@@ -44,53 +49,64 @@ type (
 		Cond *condition  `(@@`
 		Expr *expression `| "(" @@ ")")`
 	}
-
-	query struct {
-		Exp *expression `@@`
-	}
 )
 
 var (
+	// Gravity log query lexer
 	qLexer = lexer.Must(lexer.Regexp(`(\s+)` +
 		`|(?P<Keyword>(?i)POD|CONTAINER|FILE|AND|OR|NOT)` +
-		`|(?P<Ident>[a-zA-Z0-9_\.][a-zA-Z0-9_\.\-]*)` + //POSIX "Fully portable filenames"
+		`|(?P<Ident>[a-zA-Z0-9_\.][a-zA-Z0-9_\.\-]*)` +
 		`|(?P<Operator>:|[()])` +
 		`|(?P<String>"([^\\"]|\\.)*"|'[^']*')`,
 	))
 
+	// Gravity log query parser
 	qParser = participle.MustBuild(&query{},
 		participle.Lexer(qLexer),
 		participle.Unquote("String"),
 		participle.CaseInsensitive("Keyword"))
 
+	// Map is used to map 'Gravity log terms' to 'Logrange fields'.
+	// In Logrange database the 'fields' are attached to each log entry and contain
+	// such data as pod name, container name etc. The 'fields' are used in
+	// LQL (Logrange Query Language) queries.
 	keyToField = map[string]string{
 		"POD":       "pod",
 		"CONTAINER": "cname",
 		"FILE":      "cid",
 	}
 
-	escaper = strings.NewReplacer("\"", "\\\"")
+	escaper = strings.NewReplacer("\\", "\\\\", "\"", "\\\"")
 )
 
-func parseGrQuery(qs string) (*query, error) {
+func parseGravityQuery(qs string) (*query, error) {
 	q := &query{}
 	err := qParser.ParseString(qs, q)
 	return q, err
 }
 
-func buildLql(grQuery string, partition string, limit int, offset int) string {
+// The function is used to build LQL (Logrange Query Language) query
+// by the given params, basically it translates 'Gravity log query'
+// to LQL query.
+//
+// The result is the valid LQL query which looks for matching entries
+// from tail (for given offset and limit). If 'Gravity log query' turns out to be invalid,
+// it is used as literal text in LQL query.
+func BuildTailLqlQuery(grQuery string, partition string, limit int, offset int) string {
 	var lql bytes.Buffer
 	lql.WriteString("SELECT FROM ")
 	lql.WriteString(partition)
 
 	if grQuery != "" {
 		lql.WriteString(" WHERE ")
-		q, err := parseGrQuery(grQuery)
-		if err != nil { //bad query or literal search request
+		q, err := parseGravityQuery(grQuery)
+
+		if err != nil { // Bad query or literal search request
 			lql.WriteString("msg")
 			lql.WriteString(" CONTAINS ")
 			lql.WriteString("\"" + escaper.Replace(grQuery) + "\"")
-		} else {
+
+		} else { // Good query
 			if len(q.Exp.Or) > 1 {
 				lql.WriteString("(")
 			}
@@ -99,15 +115,14 @@ func buildLql(grQuery string, partition string, limit int, offset int) string {
 			if len(q.Exp.Or) > 1 {
 				lql.WriteString(")")
 			}
-			for _, f := range files {
+			for _, f := range files { // Unconditionally add files which match condition
 				lql.WriteString(" OR ")
 				lql.WriteString(fmt.Sprintf("fields:file CONTAINS \"%v\"", f))
 			}
 		}
 	}
 
-	lql.WriteString(" POSITION TAIL ")
-
+	lql.WriteString(" POSITION TAIL")
 	if offset != 0 {
 		lql.WriteString(" OFFSET ")
 		lql.WriteString(strconv.Itoa(offset))
@@ -122,7 +137,6 @@ func buildLql(grQuery string, partition string, limit int, offset int) string {
 
 func buildOrLql(cnd []*orCondition, files *[]string) string {
 	var orLql bytes.Buffer
-	orLql.WriteString("")
 
 	for _, c := range cnd {
 		if orLql.Len() > 1 {
@@ -142,7 +156,6 @@ func buildOrLql(cnd []*orCondition, files *[]string) string {
 
 func buildAndLql(cnd []*xCondition, files *[]string) string {
 	var andLql bytes.Buffer
-	andLql.WriteString("")
 
 	for _, c := range cnd {
 		if andLql.Len() > 1 {
@@ -163,6 +176,7 @@ func buildAndLql(cnd []*xCondition, files *[]string) string {
 			k, v := strings.ToUpper(c.Cond.Key), escaper.Replace(c.Cond.Value)
 			andLql.WriteString(fmt.Sprintf("fields:%v=\"%v\"", keyToField[k], v))
 			if k == "FILE" {
+				// collect all the files, so that we can add them to the whole query later
 				*files = append(*files, v)
 			}
 		}

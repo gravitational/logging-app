@@ -95,8 +95,10 @@ spec:
               mountPath: /opt/logrange/lr/config
             - name: extdockercontainers
               mountPath: /ext/docker/containers
-            - name: varlib
-              mountPath: /var/lib
+            - name: varlibgravitysite
+              mountPath: /var/lib/gravity/site
+            - name: varliblogrange
+              mountPath: /var/lib/logrange
             - name: varlog
               mountPath: /var/log
       volumes:
@@ -106,9 +108,13 @@ spec:
         - name: extdockercontainers
           hostPath:
             path: /ext/docker/containers
-        - name: varlib
+        - name: varlibgravitysite
           hostPath:
-            path: /var/lib
+            path: /var/lib/gravity/site
+        - name: varliblogrange
+          hostPath:
+            path: /var/lib/logrange
+            type: DirectoryOrCreate
         - name: varlog
           hostPath:
             path: /var/log

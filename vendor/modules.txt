@@ -20,6 +20,12 @@ github.com/google/gofuzz
 github.com/googleapis/gnostic/OpenAPIv2
 github.com/googleapis/gnostic/compiler
 github.com/googleapis/gnostic/extensions
+# github.com/gravitational/logrus v0.10.1-0.20180402202453-dcdb95d728db
+github.com/gravitational/logrus
+# github.com/gravitational/trace v0.0.0-20190218181455-5d6afe38af2b
+github.com/gravitational/trace
+# github.com/jonboulle/clockwork v0.1.0
+github.com/jonboulle/clockwork
 # github.com/jrivets/gorivets v0.0.0-20170920013151-fa5c087ad733
 github.com/jrivets/gorivets
 # github.com/jrivets/log4g v0.0.0-20171008071556-0d3a418ba12a
@@ -28,12 +34,14 @@ github.com/jrivets/log4g
 github.com/json-iterator/go
 # github.com/julienschmidt/httprouter v1.2.0
 github.com/julienschmidt/httprouter
+# github.com/konsorten/go-windows-terminal-sequences v1.0.1
+github.com/konsorten/go-windows-terminal-sequences
 # github.com/logrange/logrange v0.0.0-20190419222701-4ee1c20eafd6
 github.com/logrange/logrange/api
 github.com/logrange/logrange/api/rpc
-github.com/logrange/logrange/client
 github.com/logrange/logrange/pkg/forwarder
 github.com/logrange/logrange/pkg/utils
+github.com/logrange/logrange/client
 github.com/logrange/logrange/pkg/backend
 github.com/logrange/logrange/pkg/cursor
 github.com/logrange/logrange/pkg/model
@@ -41,17 +49,17 @@ github.com/logrange/logrange/pkg/model/field
 github.com/logrange/logrange/pkg/model/tag
 github.com/logrange/logrange/pkg/partition
 github.com/logrange/logrange/pkg/pipe
-github.com/logrange/logrange/pkg/scanner
-github.com/logrange/logrange/pkg/storage
 github.com/logrange/logrange/pkg/forwarder/sink
 github.com/logrange/logrange/pkg/lql
+github.com/logrange/logrange/pkg/storage
+github.com/logrange/logrange/pkg/scanner
 github.com/logrange/logrange/pkg/container
 github.com/logrange/logrange/pkg/utils/kvstring
 github.com/logrange/logrange/pkg/tindex
-github.com/logrange/logrange/pkg/scanner/model
-github.com/logrange/logrange/pkg/scanner/parser
 github.com/logrange/logrange/pkg/syslog
 github.com/logrange/logrange/pkg/scanner/parser/date
+github.com/logrange/logrange/pkg/scanner/model
+github.com/logrange/logrange/pkg/scanner/parser
 # github.com/logrange/range v0.0.0-20190418174346-1af9041636f1
 github.com/logrange/range/pkg/transport
 github.com/logrange/range/pkg/records
@@ -76,15 +84,17 @@ github.com/modern-go/reflect2
 github.com/mohae/deepcopy
 # github.com/pkg/errors v0.8.1
 github.com/pkg/errors
+# github.com/sirupsen/logrus v1.4.1
+github.com/sirupsen/logrus
 # golang.org/x/crypto v0.0.0-20190418165655-df01cb2cc480
 golang.org/x/crypto/ssh/terminal
 # golang.org/x/net v0.0.0-20190419010253-1f3472d942ba
+golang.org/x/net/context
 golang.org/x/net/http2
 golang.org/x/net/http/httpguts
 golang.org/x/net/http2/hpack
 golang.org/x/net/idna
 golang.org/x/net/context/ctxhttp
-golang.org/x/net/context
 # golang.org/x/oauth2 v0.0.0-20190402181905-9f3314589c9a
 golang.org/x/oauth2
 golang.org/x/oauth2/internal

@@ -18,7 +18,8 @@ package main
 
 import (
 	"context"
-	"fmt"
+	log "github.com/gravitational/logrus"
+	"github.com/gravitational/trace"
 	"github.com/jrivets/log4g"
 	"github.com/logrange/logrange/api/rpc"
 	"github.com/logrange/logrange/pkg/utils"
@@ -32,20 +33,25 @@ const (
 )
 
 const (
-	argCfgFile    = "config-file"
-	argLogCfgFile = "log-config-file"
+	// Config file path
+	argCfgFile = "config-file"
 
-	argServerAddr    = "server-addr"
+	// Logrange server address (remote)
+	argServerAddr = "server-addr"
+
+	// HTTP server address to listen (local)
 	argAPIListenAddr = "api-listen-addr"
 )
 
 var (
 	cfg    = NewDefaultConfig()
-	logger = log4g.GetLogger("adapter")
+	logger = log.WithField(trace.Component, "logging-app.main")
 )
 
 func main() {
-	defer log4g.Shutdown()
+	log.SetLevel(log.InfoLevel)
+	log.SetFormatter(&log.TextFormatter{})
+	log4g.SetLogLevel("", log4g.FATAL) // mute imported log4g libs
 
 	app := &ucli.App{
 		Name:    "adapter",
@@ -69,10 +75,6 @@ func main() {
 						Name:  argCfgFile,
 						Usage: "configuration file path",
 					},
-					&ucli.StringFlag{
-						Name:  argLogCfgFile,
-						Usage: "log4g configuration file path",
-					},
 				},
 			},
 		},
@@ -81,43 +83,34 @@ func main() {
 	sort.Sort(ucli.FlagsByName(app.Flags))
 	sort.Sort(ucli.FlagsByName(app.Commands[0].Flags))
 	if err := app.Run(os.Args); err != nil {
-		logger.Error(err)
+		logger.Fatal(trace.DebugReport(err))
 	}
 }
 
 func initCfg(c *ucli.Context) error {
-	var (
-		err error
-	)
-
-	logCfgFile := c.String(argLogCfgFile)
-	if logCfgFile != "" {
-		err = log4g.ConfigF(logCfgFile)
-		if err != nil {
-			return err
-		}
-	}
-
 	cfgFile := c.String(argCfgFile)
 	if cfgFile != "" {
 		logger.Info("Loading config from=", cfgFile)
 		config, err := LoadCfgFromFile(cfgFile)
 		if err != nil {
-			return err
+			return trace.Wrap(err)
 		}
-		cfg.Apply(config)
+		cfg.Merge(config)
 	}
 
 	applyArgsToCfg(c, cfg)
+	if err := cfg.Check(); err != nil {
+		return trace.Wrap(err, "invalid config")
+	}
 	return nil
 }
 
 func applyArgsToCfg(c *ucli.Context, cfg *Config) {
-	if sa := c.String(argServerAddr); sa != "" {
-		cfg.Logrange.Transport.ListenAddr = sa
+	if addr := c.String(argServerAddr); addr != "" {
+		cfg.Logrange.Transport.ListenAddr = addr
 	}
-	if aa := c.String(argAPIListenAddr); aa != "" {
-		cfg.Gravity.ApiListenAddr = aa
+	if addr := c.String(argAPIListenAddr); addr != "" {
+		cfg.Gravity.ApiListenAddr = addr
 	}
 }
 
@@ -130,19 +123,17 @@ func newCtx() context.Context {
 	return ctx
 }
 
-//===================== adapter =====================
-
 func runAdapter(c *ucli.Context) error {
 	err := initCfg(c)
 	if err != nil {
-		return err
+		return trace.Wrap(err)
 	}
 
 	cli, err := rpc.NewClient(*cfg.Logrange.Transport)
 	if err != nil {
-		return fmt.Errorf("failed to create client, err=%v", err)
+		return trace.WrapWithMessage(err, "failed to create Logrange client")
 	}
 
 	defer cli.Close()
-	return Run(newCtx(), cfg, cli)
+	return Run(newCtx(), *cfg, cli)
 }
