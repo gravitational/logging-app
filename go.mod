@@ -3,6 +3,7 @@ module github.com/gravitational/logging-app
 go 1.11
 
 require (
+	github.com/LK4D4/joincontext v0.0.0-20171026170139-1724345da6d5
 	github.com/alecthomas/participle v0.2.1
 	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/gogo/protobuf v1.2.1 // indirect
