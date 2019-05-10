@@ -9,7 +9,7 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-    - name: rest
+    - name: api
       protocol: TCP
       port: 8083
   selector:
@@ -64,7 +64,7 @@ data:
         }
       },
 
-      "SyncIntervalSec": 5
+      "SyncIntervalSec": 20
     }
 
   forward-tmpl.json: |
@@ -89,9 +89,6 @@ data:
         }
       }
     }
-
-  log4g.properties: |
-    # log4g configuration
 
 ---
 apiVersion: extensions/v1beta1
@@ -121,7 +118,7 @@ spec:
           image: log-adapter:0.1.0
           imagePullPolicy: Always
           ports:
-            - name: rest
+            - name: api
               protocol: TCP
               containerPort: 8083
           volumeMounts:
@@ -129,8 +126,6 @@ spec:
               mountPath: /opt/logrange/gravity/config
             - name: extdockercontainers
               mountPath: /ext/docker/containers
-            - name: varlib
-              mountPath: /var/lib
             - name: varlog
               mountPath: /var/log
       volumes:
@@ -140,9 +135,6 @@ spec:
         - name: extdockercontainers
           hostPath:
             path: /ext/docker/containers
-        - name: varlib
-          hostPath:
-            path: /var/lib
         - name: varlog
           hostPath:
             path: /var/log
