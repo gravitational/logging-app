@@ -84,6 +84,9 @@ const (
 	// Log tail default limit
 	defaultTailLinesLimit = 1000
 
+	// Log tail default offset
+	defaultTailLinesOffset = -1000
+
 	// Log download maximum number of lines
 	downloadLinesMax = 50000000
 
@@ -163,7 +166,7 @@ func (s *Server) logHandler(ctx context.Context, rw http.ResponseWriter, rq *htt
 	}
 
 	// build Logrange query
-	qr := s.buildQueryRequest(queryParam, "tail", limit, -1000)
+	qr := s.buildQueryRequest(queryParam, "tail", limit, defaultTailLinesOffset)
 	s.logger.Info("log(): Query=", qr.Query)
 
 	// join contexts to handle both server int and transport err
@@ -188,7 +191,7 @@ func (s *Server) logHandler(ctx context.Context, rw http.ResponseWriter, rq *htt
 	return trace.Wrap(err)
 }
 
-// "/v1/download" api handler, returns compressed tarball stream of logs from tail
+// "/v1/download" api handler, returns compressed tarball stream of logs
 //
 // No query params are supported.
 //

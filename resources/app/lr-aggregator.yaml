@@ -26,6 +26,7 @@ metadata:
 data:
   logrange.json: |
     {
+      "BaseDir": "/var/lib/logrange/data/",
       "HostHostId": 0,
       "HostLeaseTTLSec": 5,
       "HostRegisterTimeoutSec": 0,
@@ -38,7 +39,6 @@ data:
         "TlsCAFile": "/opt/logrange/config/tls/ca.pem"
       },
       "JrnlCtrlConfig": {
-        "JournalsDir": "/var/lib/logrange/db/",
         "MaxOpenFileDescs": 500,
         "CheckFullScan": false,
         "RecoverDisabled": false,
