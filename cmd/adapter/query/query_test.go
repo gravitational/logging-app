@@ -21,7 +21,7 @@ import (
 	"testing"
 )
 
-func Test_BuildTailLqlQuery(t *testing.T) {
+func Test_BuildLqlQuery(t *testing.T) {
 	type args struct {
 		grQuery string
 		pipe    string
@@ -36,53 +36,53 @@ func Test_BuildTailLqlQuery(t *testing.T) {
 				grQuery: "",
 				pipe:    "logrange.pipe=__default__",
 			},
-			want: "SELECT FROM logrange.pipe=__default__ POSITION TAIL"},
+			want: "SELECT FROM logrange.pipe=__default__"},
 
 		{name: "test2",
 			args: args{
 				grQuery: "POD:pd1 AND podmist\"ake",
 				pipe:    "logrange.pipe=__default__",
 			},
-			want: "SELECT FROM logrange.pipe=__default__ WHERE msg CONTAINS \"POD:pd1 AND podmist\\\"ake\" POSITION TAIL"},
+			want: "SELECT FROM logrange.pipe=__default__ WHERE msg CONTAINS \"POD:pd1 AND podmist\\\"ake\""},
 
 		{name: "test3",
 			args: args{
 				grQuery: "POD:po1 or NOT pod:\"pod2\" and file:\"file1\" AND file:\"file2\" and noT (container:\"container1\" or container:cnt2)",
 				pipe:    "logrange.pipe=__default__",
 			},
-			want: "SELECT FROM logrange.pipe=__default__ WHERE (fields:pod=\"po1\" OR (NOT fields:pod=\"pod2\" AND fields:cid=\"file1\" AND fields:cid=\"file2\" AND NOT (fields:cname=\"container1\" OR fields:cname=\"cnt2\"))) OR fields:file CONTAINS \"file1\" OR fields:file CONTAINS \"file2\" POSITION TAIL"},
+			want: "SELECT FROM logrange.pipe=__default__ WHERE (fields:pod=\"po1\" OR (NOT fields:pod=\"pod2\" AND fields:cid=\"file1\" AND fields:cid=\"file2\" AND NOT (fields:cname=\"container1\" OR fields:cname=\"cnt2\"))) OR fields:file CONTAINS \"file1\" OR fields:file CONTAINS \"file2\""},
 
 		{name: "test4",
 			args: args{
 				grQuery: "(NOT POD:pd1) AND File:fLe1",
 				pipe:    "logrange.pipe=__default__",
 			},
-			want: "SELECT FROM logrange.pipe=__default__ WHERE (NOT fields:pod=\"pd1\" AND fields:cid=\"fLe1\") OR fields:file CONTAINS \"fLe1\" POSITION TAIL"},
+			want: "SELECT FROM logrange.pipe=__default__ WHERE (NOT fields:pod=\"pd1\" AND fields:cid=\"fLe1\") OR fields:file CONTAINS \"fLe1\""},
 
 		{name: "test5",
 			args: args{
 				grQuery: "pod:\"p\\\\d1\"",
 				pipe:    "logrange.pipe=__default__",
 			},
-			want: "SELECT FROM logrange.pipe=__default__ WHERE fields:pod=\"p\\\\d1\" POSITION TAIL"},
+			want: "SELECT FROM logrange.pipe=__default__ WHERE fields:pod=\"p\\\\d1\""},
 
 		{name: "test6",
 			args: args{
 				grQuery: "",
 				pipe:    "logrange.pipe=__default__",
 			},
-			want: "SELECT FROM logrange.pipe=__default__ POSITION TAIL"},
+			want: "SELECT FROM logrange.pipe=__default__"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := BuildTailLqlQuery(tt.args.grQuery, tt.args.pipe, 0, 0)
+			got := BuildLqlQuery(tt.args.grQuery, tt.args.pipe, 0, 0)
 			if got != tt.want {
-				t.Errorf("BuildTailLqlQuery() = %v, want %v", got, tt.want)
+				t.Errorf("BuildLqlQuery() = %v, want %v", got, tt.want)
 			}
 
 			if _, err := lql.ParseLql(got); err != nil {
-				t.Errorf("BuildTailLqlQuery() = %v, err= %v", got, err)
+				t.Errorf("BuildLqlQuery() = %v, err= %v", got, err)
 			}
 		})
 	}

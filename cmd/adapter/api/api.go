@@ -23,6 +23,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/LK4D4/joincontext"
 	"github.com/gravitational/logging-app/cmd/adapter/query"
 	log "github.com/gravitational/logrus"
 	"github.com/gravitational/trace"
@@ -133,11 +134,11 @@ func (s *Server) Shutdown() error {
 // "/v1/log" api handler, returns logs from tail for the given params:
 //
 // - 'query':
-// 	 	allowed query terms: "pod", "container", "file", "or", "and"
-//   	example: query="pod:p1 and container:c1 and file:f1 or file:f2"
+//      allowed query terms: "pod", "container", "file", "or", "and"
+//      example: query="pod:p1 and container:c1 and file:f1 or file:f2"
 // - 'limit':
 //      allowed values: int >= 0
-//	 	example: limit=100
+//      example: limit=100
 //
 // In case of error it returns the error (no response write happens) so it's up to
 // caller to handle it properly, e.g. return appropriate http err and code.
@@ -162,12 +163,16 @@ func (s *Server) logHandler(ctx context.Context, rw http.ResponseWriter, rq *htt
 	}
 
 	// build Logrange query
-	qr := s.buildQueryRequest(queryParam, limit)
+	qr := s.buildQueryRequest(queryParam, "tail", limit, -1000)
 	s.logger.Info("log(): Query=", qr.Query)
+
+	// join contexts to handle both server int and transport err
+	jctx, cancel := joincontext.Join(ctx, rq.Context())
+	defer cancel()
 
 	// execute and if executed ok, transform to Gravity format, marshal and write response
 	res := &api.QueryResult{}
-	err = s.lrClient.Query(ctx, qr, res)
+	err = s.lrClient.Query(jctx, qr, res)
 	if err == nil {
 		var logEntries []string
 		logEntries, err = toGravityLogEntries(res.Events)
@@ -202,7 +207,7 @@ func (s *Server) downloadHandler(ctx context.Context,
 	defer tgEntryWriter.close()
 
 	// build Logrange query
-	qr := s.buildQueryRequest("", downloadLinesMax)
+	qr := s.buildQueryRequest("", "head", downloadLinesMax, 0)
 	s.logger.Info("download(): Query=", qr.Query)
 
 	var (
@@ -210,9 +215,13 @@ func (s *Server) downloadHandler(ctx context.Context,
 		errW error // write error
 	)
 
+	// join contexts to handle both server int and transport err
+	jctx, cancel := joincontext.Join(ctx, rq.Context())
+	defer cancel()
+
 	// execute Logrange query and write tar.gz stream
 	buf := bytes.Buffer{}
-	errQ = api.Select(ctx, s.lrClient, qr, false,
+	errQ = api.Select(jctx, s.lrClient, qr, false,
 		func(res *api.QueryResult) {
 			if errW == nil {
 				writeEvents(res.Events, &buf)
@@ -235,10 +244,10 @@ func (s *Server) downloadHandler(ctx context.Context,
 	return trace.Wrap(errW)
 }
 
-func (s *Server) buildQueryRequest(q string, limit int) *api.QueryRequest {
+func (s *Server) buildQueryRequest(q string, p string, limit int, offset int) *api.QueryRequest {
 	return &api.QueryRequest{
-		Query: query.BuildTailLqlQuery(q, s.lrPartition, limit, -limit),
-		Pos:   "tail", Offset: -limit, Limit: limit,
+		Query: query.BuildLqlQuery(q, s.lrPartition, limit, offset),
+		Pos:   p, Offset: offset, Limit: limit,
 	}
 }
 

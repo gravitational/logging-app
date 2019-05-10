@@ -90,9 +90,9 @@ func parseGravityQuery(qs string) (*query, error) {
 // to LQL query.
 //
 // The result is the valid LQL query which looks for matching entries
-// from tail (for given offset and limit). If 'Gravity log query' turns out to be invalid,
+// (for given offset and limit). If 'Gravity log query' turns out to be invalid,
 // it is used as literal text in LQL query.
-func BuildTailLqlQuery(grQuery string, partition string, limit int, offset int) string {
+func BuildLqlQuery(grQuery string, partition string, limit int, offset int) string {
 	var lql bytes.Buffer
 	lql.WriteString("SELECT FROM ")
 	lql.WriteString(partition)
@@ -122,7 +122,6 @@ func BuildTailLqlQuery(grQuery string, partition string, limit int, offset int) 
 		}
 	}
 
-	lql.WriteString(" POSITION TAIL")
 	if offset != 0 {
 		lql.WriteString(" OFFSET ")
 		lql.WriteString(strconv.Itoa(offset))
