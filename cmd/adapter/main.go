@@ -83,7 +83,7 @@ func main() {
 	sort.Sort(ucli.FlagsByName(app.Flags))
 	sort.Sort(ucli.FlagsByName(app.Commands[0].Flags))
 	if err := app.Run(os.Args); err != nil {
-		logger.Fatal(trace.DebugReport(err))
+		logger.Fatal(trace.DebugReport(err)) // note, logger.Fatal does Exit(1)
 	}
 }
 
@@ -100,7 +100,7 @@ func initCfg(c *ucli.Context) error {
 
 	applyArgsToCfg(c, cfg)
 	if err := cfg.Check(); err != nil {
-		return trace.Wrap(err, "invalid config")
+		return trace.WrapWithMessage(err, "invalid config")
 	}
 	return nil
 }

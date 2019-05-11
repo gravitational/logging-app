@@ -42,8 +42,6 @@ type (
 	// internally the incoming queries are transformed to LQL (Logrange Query Language)
 	// and executed against Logrange database.
 	Server struct {
-		// Server listen address
-		listenAddr string
 		// Http server
 		server *http.Server
 		// Logrange client query
@@ -88,7 +86,7 @@ const (
 	defaultTailLinesOffset = -1000
 
 	// Log download maximum number of lines
-	downloadLinesMax = 50000000
+	downloadLinesMax = 500000000
 
 	// Log download limit in bytes per file
 	downloadBytesPerFileLimit = 10 * 1024 * 1024
@@ -97,40 +95,43 @@ const (
 	downloadFilenamePrfx = "messages"
 )
 
-// Creates new server for the given params
+// Creates new server for the given params,
+// it has Serve() and Shutdown() lifecycle methods
+// it's caller's responsibility to call them appropriately
 func NewServer(listenAddr string, lrClient api.Client, lrPartition string) *Server {
 	return &Server{
-		listenAddr:  listenAddr,
+		server:      &http.Server{Addr: listenAddr},
 		lrClient:    lrClient,
 		lrPartition: lrPartition,
 		logger:      log.WithField(trace.Component, "logging-app.api"),
 	}
 }
 
-// Starts serving requests on the configured port, blocking, always returns a non-nil error
-func (s *Server) Serve(ctx context.Context) {
+// Starts serving requests on the configured port, blocking, returns error
+// if underlying htt.Server.Listen() returns err != http.ErrServerClosed
+func (s *Server) Serve(ctx context.Context) error {
 	router := httprouter.New()
 	router.GET("/v1/log", s.makeHandlerWithCtx(ctx, s.logHandler))
 	router.GET("/v1/download", s.makeHandlerWithCtx(ctx, s.downloadHandler))
 
-	s.server = &http.Server{Addr: s.listenAddr, Handler: router}
+	s.server.Handler = router
 	if err := s.server.ListenAndServe(); err != http.ErrServerClosed {
-		s.logger.Fatal("serve(): ", err)
+		return trace.Wrap(err)
 	}
+
+	return nil
 }
 
 // Gracefully shuts down the server,
-// blocks till shutdown, error or timeout happens (5 sec by default)
+// blocks till shutdown, error or timeout happens (10 sec by default)
 func (s *Server) Shutdown() error {
-	if s.server != nil {
-		sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := s.server.Shutdown(sctx); err != nil {
-			return trace.Wrap(err)
-		}
-	}
+	sctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-	s.server = nil
+	err := s.server.Shutdown(sctx)
+	if err != nil {
+		return trace.Wrap(err)
+	}
 	return nil
 }
 
@@ -256,7 +257,7 @@ func (s *Server) buildQueryRequest(q string, p string, limit int, offset int) *a
 
 // Wrapper for http handler, besides calling the actual handler it
 // tries to handle returned errors (if any). In particular,
-// it logs the request, error and writes StatusInternalServerError error
+// it logs the request, error and writes http error
 func (s *Server) makeHandlerWithCtx(ctx context.Context, handler handlerWithCtx) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		rw := &responseWriterWithStatus{ResponseWriter: w}

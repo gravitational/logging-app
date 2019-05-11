@@ -41,8 +41,8 @@ type (
 	// configuration synchronizations in between Gravity and Logrange in order to
 	// meet Gravity logging application requirements.
 	//
-	// Adapter has certain lifecycle and it's
-	// caller responsibility to call Start() and Close() appropriately.
+	// Adapter has certain lifecycle and it's caller's responsibility to call
+	// Run(ctx) and cancel the context (ctx) in order to stop the adapter.
 	//
 	Adapter struct {
 		cfg Config
@@ -58,47 +58,49 @@ type (
 	}
 )
 
-// Runs new Adapter instance and waits till its execution ends,
-// context is cancelled or error happens.
+// Runs new Adapter instance and blocks till err or context is cancelled
 func Run(ctx context.Context, cfg Config, cl lapi.Client) error {
-	adaptr, err := NewAdapter(cfg, cl)
-	if err != nil {
-		return trace.WrapWithMessage(err, "failed to create adapter")
+	ad := NewAdapter(cfg, cl)
+	if err := ad.Run(ctx); err != nil {
+		return trace.WrapWithMessage(err, "failed to run adapter")
 	}
-	if err := adaptr.Start(ctx); err != nil {
-		return trace.WrapWithMessage(err, "failed to start adapter")
-	}
-
-	<-ctx.Done()
-	_ = adaptr.Close()
-
-	adaptr.logger.Info("Shutdown.")
 	return nil
 }
 
-// Creates new Adapter instance. Adapter has certain lifecycle and it's
-// caller responsibility to call Start() and Close() appropriately.
-func NewAdapter(cfg Config, cli lapi.Client) (*Adapter, error) {
+// Creates new Adapter instance
+func NewAdapter(cfg Config, cli lapi.Client) *Adapter {
 	f := new(Adapter)
 	f.cfg = cfg
 	f.lrClient = cli
 	f.logger = log.WithField(trace.Component, "logging-app.adapter")
-	return f, nil
+	return f
 }
 
-// Starts adapter which includes starting goroutines for serving API requests
-// and running recurring jobs (sync, cronQueries), the method is non-blocking
-// and passed context controls adapter's lifespan (including started goroutines)
-func (ad *Adapter) Start(ctx context.Context) error {
+// Runs Adapter, that includes starting goroutines
+// of recurring jobs (sync, cronQueries) and running API server.
+// Passed context controls adapter's lifespan (including started goroutines).
+func (ad *Adapter) Run(ctx context.Context) error {
 	ad.logger.Info("Starting, config=", ad.cfg)
 	if err := ad.init(); err != nil {
 		return trace.Wrap(err)
 	}
 
-	ad.runApiServer(ctx)
+	// cancel in case if apiServer fails with error
+	// we need to cancel jobs in terms of this function
+	ctx, cancel := context.WithCancel(ctx)
+
+	// async recurring jobs
 	ad.runSync(ctx)
 	ad.runCronQueries(ctx)
-	return nil
+
+	// blocking call to serve API
+	err := ad.runApiServer(ctx)
+	cancel()
+
+	// wait started goroutines
+	errW := ad.wait()
+	ad.logger.Warn("Shutdown, err=", errW)
+	return err
 }
 
 func (ad *Adapter) init() error {
@@ -111,43 +113,46 @@ func (ad *Adapter) init() error {
 	return trace.Wrap(err)
 }
 
-// The method ensures that Adapter shutdown has finished
-// and all the related jobs (goroutines) are stopped.
-// The method has timeout (1 min by default), if shutdown
-// didn't finish during that time the method returns error.
-func (ad *Adapter) Close() error {
-	var err error
+func (ad *Adapter) wait() error {
 	if !utils.WaitWaitGroup(&ad.wg, time.Minute) {
-		err = trace.Errorf("close timeout")
+		return trace.Errorf("wait timeout") // probably some goroutine got stuck...
 	}
-	ad.logger.Info("Closed, err=", err)
-	return trace.Wrap(err)
+	return nil
 }
 
-func (ad *Adapter) runApiServer(ctx context.Context) {
-	ad.logger.Info("Running serve API on ", ad.cfg.Gravity.ApiListenAddr)
+// blocking
+func (ad *Adapter) runApiServer(ctx context.Context) error {
+	ad.logger.Info("Running API server on ", ad.cfg.Gravity.ApiListenAddr)
+	srv := api.NewServer(cfg.Gravity.ApiListenAddr, ad.lrClient, cfg.Logrange.Partition)
+
 	ad.wg.Add(1)
 	go func() {
-		srv := api.NewServer(ad.cfg.Gravity.ApiListenAddr, ad.lrClient, ad.cfg.Logrange.Partition)
-		go func() {
-			srv.Serve(ctx)
-		}()
+		defer ad.wg.Done()
 		select {
 		case <-ctx.Done():
 			_ = srv.Shutdown()
 		}
-		ad.logger.Warn("Serving API stopped.")
-		ad.wg.Done()
 	}()
+
+	err := srv.Serve(ctx)
+	ad.logger.Warn("API server stopped, err=", err)
+	return trace.Wrap(err)
 }
 
+// non-blocking
 func (ad *Adapter) runCronQueries(ctx context.Context) {
+	if len(ad.cfg.Logrange.CronQueries) == 0 {
+		ad.logger.Info("No cron queries registered to run...")
+		return
+	}
+
 	ad.logger.Info("Running ", len(ad.cfg.Logrange.CronQueries), " cron queries: ", ad.cfg.Logrange.CronQueries)
 	for _, cq := range ad.cfg.Logrange.CronQueries {
 		ad.wg.Add(1)
 		go func(cq cronQuery) {
 			defer ad.wg.Done()
 			ad.runCronQuery(ctx, cq)
+			ad.logger.Warn("Cron queries stopped.")
 		}(cq)
 	}
 }
@@ -174,6 +179,7 @@ func (ad *Adapter) runCronQuery(ctx context.Context, cq cronQuery) {
 	}
 }
 
+// non-blocking
 func (ad *Adapter) runSync(ctx context.Context) {
 	ad.logger.Info("Running sync every ", ad.cfg.SyncIntervalSec, " seconds...")
 	ticker := time.NewTicker(time.Second *
@@ -181,10 +187,10 @@ func (ad *Adapter) runSync(ctx context.Context) {
 
 	ad.wg.Add(1)
 	go func() {
+		defer ad.wg.Done()
 		for utils.Wait(ctx, ticker) {
 			ad.k8sClient.SyncForwarders(ctx)
 		}
 		ad.logger.Warn("Sync stopped.")
-		ad.wg.Done()
 	}()
 }
