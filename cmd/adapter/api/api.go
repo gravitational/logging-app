@@ -52,7 +52,7 @@ type (
 		logger *log.Entry
 	}
 
-	// Http request handle but with context support
+	// Http request handler but with context support
 	handlerWithCtx func(ctx context.Context, w http.ResponseWriter,
 		r *http.Request, p httprouter.Params) error
 
@@ -95,7 +95,7 @@ const (
 	downloadFilenamePrfx = "messages"
 )
 
-// Creates new server for the given params,
+// NewServer creates api server for the given params,
 // it has Serve() and Shutdown() lifecycle methods
 // it's caller's responsibility to call them appropriately
 func NewServer(listenAddr string, lrClient api.Client, lrPartition string) *Server {
@@ -108,7 +108,7 @@ func NewServer(listenAddr string, lrClient api.Client, lrPartition string) *Serv
 }
 
 // Starts serving requests on the configured port, blocking, returns error
-// if underlying htt.Server.Listen() returns err != http.ErrServerClosed
+// if underlying http.Server.Listen() returns err != http.ErrServerClosed
 func (s *Server) Serve(ctx context.Context) error {
 	router := httprouter.New()
 	router.GET("/v1/log", s.makeHandlerWithCtx(ctx, s.logHandler))
@@ -122,13 +122,10 @@ func (s *Server) Serve(ctx context.Context) error {
 	return nil
 }
 
-// Gracefully shuts down the server,
-// blocks till shutdown, error or timeout happens (10 sec by default)
-func (s *Server) Shutdown() error {
-	sctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	err := s.server.Shutdown(sctx)
+// Shutdown gracefully shuts down the server.
+// It blocks until the server has shut down of context has expired.
+func (s *Server) Shutdown(ctx context.Context) error {
+	err := s.server.Shutdown(ctx)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -145,12 +142,10 @@ func (s *Server) Shutdown() error {
 //      example: limit=100
 //
 // In case of error it returns the error (no response write happens) so it's up to
-// caller to handle it properly, e.g. return appropriate http err and code.
+// caller to handle it properly, e.g. return appropriate HTTP code.
 //
 func (s *Server) logHandler(ctx context.Context, rw http.ResponseWriter, rq *http.Request, p httprouter.Params) error {
-	var (
-		err error
-	)
+	var err error
 
 	// get query params
 	queryParam := strings.TrimSpace(rq.URL.Query().Get("query"))
@@ -162,7 +157,7 @@ func (s *Server) logHandler(ctx context.Context, rw http.ResponseWriter, rq *htt
 		limit, err = strconv.Atoi(limitParam)
 		if err != nil || limit < 0 {
 			s.logger.Warn("log(): Bad limit=", limitParam, ", using default; err=", err)
-			limit, err = defaultTailLinesLimit, nil
+			limit = defaultTailLinesLimit
 		}
 	}
 
@@ -170,25 +165,32 @@ func (s *Server) logHandler(ctx context.Context, rw http.ResponseWriter, rq *htt
 	qr := s.buildQueryRequest(queryParam, "tail", limit, defaultTailLinesOffset)
 	s.logger.Info("log(): Query=", qr.Query)
 
-	// join contexts to handle both server int and transport err
+	// join contexts to handle both server interruption (SIGINT) and transport err
 	jctx, cancel := joincontext.Join(ctx, rq.Context())
 	defer cancel()
 
-	// execute and if executed ok, transform to Gravity format, marshal and write response
+	// execute Logrange query
 	res := &api.QueryResult{}
 	err = s.lrClient.Query(jctx, qr, res)
-	if err == nil {
-		var logEntries []string
-		logEntries, err = toGravityLogEntries(res.Events)
-		if err == nil {
-			var logEntriesBytes []byte
-			logEntriesBytes, err = json.Marshal(logEntries)
-			if err == nil {
-				_, err = rw.Write(logEntriesBytes)
-			}
-		}
+	if err != nil {
+		return trace.Wrap(err)
 	}
 
+	// transform to Gravity format
+	var logEntries []string
+	logEntries, err = toGravityLogEntries(res.Events)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	// marshal and write response
+	var logEntriesBytes []byte
+	logEntriesBytes, err = json.Marshal(logEntries)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	_, err = rw.Write(logEntriesBytes)
 	return trace.Wrap(err)
 }
 
@@ -197,10 +199,16 @@ func (s *Server) logHandler(ctx context.Context, rw http.ResponseWriter, rq *htt
 // No query params are supported.
 //
 // In case of error it returns the error so it's up to caller to handle it properly,
-// e.g. return appropriate http err and code.
+// e.g. return appropriate HTTP code.
 //
-// Please note, that if an error occur after a few successful response writes
-// end user will get file that does not contain all the requested data.
+// Please note, that if an errors occur after a few successful response writes
+// end user will not get all the requested data, though the http code will be 200.
+// In order to let client know about the interrupted response, the connection (if yet alive)
+// is explicitly closed/reset depending on the HTTP protocol, so the client can detect this
+// and inform the end user:
+//
+// 		For instance, curl error:
+// 			curl: (18) transfer closed with outstanding read data remaining
 //
 func (s *Server) downloadHandler(ctx context.Context,
 	rw http.ResponseWriter, rq *http.Request, p httprouter.Params) error {
@@ -214,38 +222,53 @@ func (s *Server) downloadHandler(ctx context.Context,
 	qr := s.buildQueryRequest("", "head", downloadLinesMax, 0)
 	s.logger.Info("download(): Query=", qr.Query)
 
-	var (
-		errQ error // query error
-		errW error // write error
-	)
-
-	// join contexts to handle both server int and transport err
+	// join contexts to handle both server interruption (e.g. SIGINT) and transport err (e.g. broken pipe)
 	jctx, cancel := joincontext.Join(ctx, rq.Context())
 	defer cancel()
 
 	// execute Logrange query and write tar.gz stream
 	buf := bytes.Buffer{}
-	errQ = api.Select(jctx, s.lrClient, qr, false,
+	err := api.Select(jctx, s.lrClient, qr, false,
 		func(res *api.QueryResult) {
-			if errW == nil {
-				writeEvents(res.Events, &buf)
-				if buf.Len() > downloadBytesPerFileLimit {
-					errW = tgEntryWriter.write(buf.Bytes())
-					buf.Reset()
+			writeEvents(res.Events, &buf)
+			if buf.Len() > downloadBytesPerFileLimit {
+				errW := tgEntryWriter.write(buf.Bytes())
+				if errW != nil {
+					s.logger.Error("download(): Response write err=", errW)
+					s.connHangUp() // the handler aborts here, see connHangUp() comments
 				}
 			}
 		})
 
 	// return query err if any
-	if errQ != nil {
-		return trace.Wrap(errQ)
-	}
-	// no write err and still some data, write it now
-	if errW == nil && buf.Len() > 0 {
-		errW = tgEntryWriter.write(buf.Bytes())
+	if err != nil {
+		return trace.Wrap(err)
 	}
 
-	return trace.Wrap(errW)
+	// still some data, write it now
+	if buf.Len() > 0 {
+		errW := tgEntryWriter.write(buf.Bytes())
+		if errW != nil {
+			s.logger.Error("download(): Response write err=", errW)
+			s.connHangUp() // the handler aborts here, see connHangUp() comments
+		}
+	}
+
+	return nil
+}
+
+func (s *Server) connHangUp() {
+	// In accordance with https://golang.org/src/net/http/server.go:
+	// If ServeHTTP panics, the server (the caller of ServeHTTP) assumes
+	// that the effect of the panic was isolated to the active request.
+	// It recovers the panic, logs a stack trace to the server error log,
+	// and either closes the network connection or sends an HTTP/2
+	// RST_STREAM, depending on the HTTP protocol. To abort a handler so
+	// the client sees an interrupted response but the server doesn't log
+	// an error, panic with the value ErrAbortHandler.
+	// To abort a handler so the client sees an interrupted response
+	// but the server doesn't log an error, panic with the value ErrAbortHandler.
+	panic(http.ErrAbortHandler)
 }
 
 func (s *Server) buildQueryRequest(q string, p string, limit int, offset int) *api.QueryRequest {
@@ -262,11 +285,12 @@ func (s *Server) makeHandlerWithCtx(ctx context.Context, handler handlerWithCtx)
 	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		rw := &responseWriterWithStatus{ResponseWriter: w}
 		err := handler(ctx, rw, r, p)
-		if err != nil {
-			s.logger.Error("Request=", r, "; err=", err)
-			if rw.status == 0 { // write err/status if no writes before
-				trace.WriteError(rw, err)
-			}
+		if err == nil {
+			return
+		}
+		s.logger.Error("Request=", r, "; err=", err)
+		if rw.status == 0 { // write err/status if there were no writes
+			trace.WriteError(rw, err)
 		}
 	}
 }

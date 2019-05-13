@@ -32,16 +32,16 @@ type (
 	// Gravity has certain expectations regarding the interface
 	// its logging application exposes to an end user. Current
 	// logging application implementation is based on Logrange database
-	// which has it's own user interface and which is pretty different from
+	// which has its own user interface and which is pretty different from
 	// what is expected by Gravity. The Adapter is intended to be
 	// an actual adapter which sits on top of Logrange interface
 	// and exposes Gravity expected interface.
 	//
 	// Adapter takes the responsibility of making all the needed transformations and
-	// configuration synchronizations in between Gravity and Logrange in order to
+	// configuration synchronizations between Gravity and Logrange in order to
 	// meet Gravity logging application requirements.
 	//
-	// Adapter has certain lifecycle and it's caller's responsibility to call
+	// Adapter has certain lifecycle and it's the caller's responsibility to execute
 	// Run(ctx) and cancel the context (ctx) in order to stop the adapter.
 	//
 	Adapter struct {
@@ -90,8 +90,8 @@ func (ad *Adapter) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 
 	// async recurring jobs
-	ad.runSync(ctx)
-	ad.runCronQueries(ctx)
+	ad.startSync(ctx)
+	ad.startCronQueries(ctx)
 
 	// blocking call to serve API
 	err := ad.runApiServer(ctx)
@@ -128,10 +128,11 @@ func (ad *Adapter) runApiServer(ctx context.Context) error {
 	ad.wg.Add(1)
 	go func() {
 		defer ad.wg.Done()
-		select {
-		case <-ctx.Done():
-			_ = srv.Shutdown()
-		}
+		<-ctx.Done()
+
+		sctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(sctx)
 	}()
 
 	err := srv.Serve(ctx)
@@ -140,7 +141,7 @@ func (ad *Adapter) runApiServer(ctx context.Context) error {
 }
 
 // non-blocking
-func (ad *Adapter) runCronQueries(ctx context.Context) {
+func (ad *Adapter) startCronQueries(ctx context.Context) {
 	if len(ad.cfg.Logrange.CronQueries) == 0 {
 		ad.logger.Info("No cron queries registered to run...")
 		return
@@ -180,7 +181,7 @@ func (ad *Adapter) runCronQuery(ctx context.Context, cq cronQuery) {
 }
 
 // non-blocking
-func (ad *Adapter) runSync(ctx context.Context) {
+func (ad *Adapter) startSync(ctx context.Context) {
 	ad.logger.Info("Running sync every ", ad.cfg.SyncIntervalSec, " seconds...")
 	ticker := time.NewTicker(time.Second *
 		time.Duration(ad.cfg.SyncIntervalSec))

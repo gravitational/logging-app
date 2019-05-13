@@ -28,34 +28,19 @@ import (
 )
 
 func Test_writeEvents(t *testing.T) {
-	type args struct {
-		evs []*api.LogEvent
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    []byte
-		wantErr bool
-	}{
-		{name: "test1",
-			args: args{evs: []*api.LogEvent{
-				{Timestamp: uint64(time.Date(2019, time.January, 1, 1,
-					1, 1, 1, time.UTC).UnixNano()),
-					Message: "hello\n",
-					Fields:  "f1=v1,f2=v2,f3=v3",
-				},
-			}},
-			want: []byte("{\"ts\":\"2019-01-01T01:01:01Z\", \"tags\":\"\", " +
-				"\"fields\":\"f1=v1,f2=v2,f3=v3\", \"msg\":\"hello\\n\"}\n")},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := bytes.Buffer{}
-			writeEvents(tt.args.evs, &got)
-			if !reflect.DeepEqual(got.Bytes(), tt.want) {
-				t.Errorf("writeEvents() = %v, want %v", string(got.Bytes()), string(tt.want))
-			}
-		})
+	evs := []*api.LogEvent{{Timestamp: uint64(time.Date(2019, time.January, 1, 1,
+		1, 1, 1, time.UTC).UnixNano()),
+		Message: "hello\n",
+		Fields:  "f1=v1,f2=v2,f3=v3",
+	}}
+
+	want := []byte("{\"ts\":\"2019-01-01T01:01:01Z\", \"tags\":\"\", " +
+		"\"fields\":\"f1=v1,f2=v2,f3=v3\", \"msg\":\"hello\\n\"}\n")
+
+	got := bytes.Buffer{}
+	writeEvents(evs, &got)
+	if !reflect.DeepEqual(got.Bytes(), want) {
+		t.Errorf("writeEvents() = %v, want %v", string(got.Bytes()), string(want))
 	}
 }
 
@@ -71,14 +56,14 @@ func TestServer_buildQueryRequest(t *testing.T) {
 		args args
 		want *api.QueryRequest
 	}{
-		{name: "test1", args: args{q: "file:f1 or pod:p1", pos: "tail", limit: 123, offset: -10},
+		{name: "build tail request ok", args: args{q: "file:f1 or pod:p1", pos: "tail", limit: 123, offset: -10},
 			want: &api.QueryRequest{
 				Limit: 123, Offset: -10, Pos: "tail",
 				Query: "SELECT FROM partition WHERE (fields:cid=\"f1\" OR fields:pod=\"p1\") OR " +
 					"fields:file CONTAINS \"f1\" OFFSET -10 LIMIT 123",
 			},
 		},
-		{name: "test2", args: args{q: "file:f1 or pod:p1", pos: "head", limit: 123, offset: 10},
+		{name: "build head request ok", args: args{q: "file:f1 or pod:p1", pos: "head", limit: 123, offset: 10},
 			want: &api.QueryRequest{
 				Limit: 123, Offset: 10, Pos: "head",
 				Query: "SELECT FROM partition WHERE (fields:cid=\"f1\" OR fields:pod=\"p1\") OR " +
@@ -99,70 +84,48 @@ func TestServer_buildQueryRequest(t *testing.T) {
 }
 
 func Test_tarGzEntryWriter_nextEntryHeader(t *testing.T) {
-	type fields struct {
-		entryNum  int
-		entryPrfx string
-	}
-	type args struct {
-		size int
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   *tar.Header
-	}{
-		{name: "test1",
-			fields: fields{entryNum: 1, entryPrfx: "prefix"},
-			args:   args{size: 123},
-			want: &tar.Header{Name: "prefix.0",
-				ModTime: time.Now(), Mode: 0777, Typeflag: tar.TypeReg, Size: 123}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			w := &tarGzEntryWriter{
-				entryNum:  tt.fields.entryNum,
-				entryPrfx: tt.fields.entryPrfx,
-			}
+	want := &tar.Header{Name: "prefix.0",
+		ModTime: time.Now(), Mode: 0777, Typeflag: tar.TypeReg, Size: 123}
 
-			got := w.nextEntryHeader(tt.args.size)
-			gtt := got.ModTime.Add(time.Minute)
+	w := &tarGzEntryWriter{
+		entryNum:  1,
+		entryPrfx: "prefix",
+	}
 
-			tt.want.ModTime = got.ModTime
-			if gtt.Before(tt.want.ModTime) {
-				t.Errorf("tarGzEntryWriter.nextEntryHeader() = %v, want %v",
-					got.ModTime, tt.want.ModTime)
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("tarGzEntryWriter.nextEntryHeader() = %v, want %v",
-					got, tt.want)
-			}
-		})
+	got := w.nextEntryHeader(123)
+	gtt := got.ModTime.Add(time.Minute)
+
+	want.ModTime = got.ModTime
+	if gtt.Before(want.ModTime) {
+		t.Errorf("tarGzEntryWriter.nextEntryHeader() = %v, want %v",
+			got.ModTime, want.ModTime)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("tarGzEntryWriter.nextEntryHeader() = %v, want %v",
+			got, want)
 	}
 }
 
 func Test_tarGzEntryWriter_write(t *testing.T) {
-	wantData := []byte("test")
+	want := []byte("test")
 
-	t.Run("test1", func(t *testing.T) {
-		//write
-		wbuf := bytes.Buffer{}
-		gw := gzip.NewWriter(&wbuf)
-		tw := tar.NewWriter(gw)
-		w := &tarGzEntryWriter{entryNum: 123, entryPrfx: "prefix", gzWriter: gw, tarWriter: tw}
-		_ = w.write(wantData)
-		w.close()
+	//write
+	wbuf := bytes.Buffer{}
+	gw := gzip.NewWriter(&wbuf)
+	tw := tar.NewWriter(gw)
+	w := &tarGzEntryWriter{entryNum: 123, entryPrfx: "prefix", gzWriter: gw, tarWriter: tw}
+	_ = w.write(want)
+	w.close()
 
-		//read
-		gzReader, _ := gzip.NewReader(&wbuf)
-		tarReader := tar.NewReader(gzReader)
-		h, _ := tarReader.Next()
-		rbuf := make([]byte, h.Size)
-		_, _ = tarReader.Read(rbuf)
+	//read
+	gzReader, _ := gzip.NewReader(&wbuf)
+	tarReader := tar.NewReader(gzReader)
+	h, _ := tarReader.Next()
+	rbuf := make([]byte, h.Size)
+	_, _ = tarReader.Read(rbuf)
 
-		//check
-		if !reflect.DeepEqual(rbuf, wantData) {
-			t.Errorf("tarGzEntryWriter.write() = %v, want %v", rbuf, wantData)
-		}
-	})
+	//check
+	if !reflect.DeepEqual(rbuf, want) {
+		t.Errorf("tarGzEntryWriter.write() = %v, want %v", rbuf, want)
+	}
 }

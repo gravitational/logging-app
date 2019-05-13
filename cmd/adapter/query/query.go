@@ -28,26 +28,26 @@ import (
 type (
 	// Represents parsed 'Gravity log query'
 	query struct {
-		Exp *expression `@@`
+		Exp *expression `parser:"@@"`
 	}
 
 	condition struct {
-		Key   string `@("POD"|"CONTAINER"|"FILE") ":"`
-		Value string `@(String|Ident)`
+		Key   string `parser:"@(\"POD\"|\"CONTAINER\"|\"FILE\") \":\""`
+		Value string `parser:"@(String|Ident)"`
 	}
 
 	expression struct {
-		Or []*orCondition `@@ { "OR" @@ }`
+		Or []*orCondition `parser:"@@ { \"OR\" @@ }"`
 	}
 
 	orCondition struct {
-		And []*xCondition `@@ { "AND" @@ }`
+		And []*xCondition `parser:"@@ { \"AND\" @@ }"`
 	}
 
 	xCondition struct {
-		Not  bool        `(@"NOT")?`
-		Cond *condition  `(@@`
-		Expr *expression `| "(" @@ ")")`
+		Not  bool        `parser:"(@\"NOT\")?"`
+		Cond *condition  `parser:"(@@"`
+		Expr *expression `parser:"| \"(\" @@ \")\")"`
 	}
 )
 

@@ -32,97 +32,71 @@ import (
 )
 
 func TestLoadCfgFromFile(t *testing.T) {
-	t.Run("test1", func(t *testing.T) {
-		// write
-		cfg := NewDefaultConfig()
-		bb, _ := json.Marshal(cfg)
-		fd, _ := writeTmpJsonFile(bb)
-		defer os.Remove(fd.Name())
+	// write
+	cfg := NewDefaultConfig()
+	bb, _ := json.Marshal(cfg)
+	fd, _ := writeTmpJsonFile(bb)
+	defer os.Remove(fd.Name())
 
-		// read
-		got, err := LoadCfgFromFile(fd.Name())
-		if err != nil {
-			t.Errorf("LoadCfgFromFile() error = %v", err)
-			return
-		}
+	// read
+	got, err := LoadCfgFromFile(fd.Name())
+	if err != nil {
+		t.Errorf("LoadCfgFromFile() error = %v", err)
+		return
+	}
 
-		// check
-		if !reflect.DeepEqual(got, cfg) {
-			t.Errorf("LoadCfgFromFile() = %v, want %v", got, cfg)
-		}
-	})
+	// check
+	if !reflect.DeepEqual(got, cfg) {
+		t.Errorf("LoadCfgFromFile() = %v, want %v", got, cfg)
+	}
 }
 
 func TestConfig_Merge(t *testing.T) {
-	type fields struct {
-		Gravity         *gravity
-		Logrange        *logrange
-		SyncIntervalSec int
+	other := &Config{
+		Gravity: &gravity{
+			ApiListenAddr: "127.0.0.123:1234",
+			Kubernetes:    &k8s.Config{Namespace: "gravity"},
+		},
+		Logrange: &logrange{
+			Partition:         "partition",
+			Kubernetes:        &k8s.Config{Namespace: "logrange"},
+			ForwarderTmplFile: "file1",
+			Transport:         &transport.Config{Tls2Way: utils.BoolPtr(true)},
+		},
 	}
-	type args struct {
-		other *Config
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   *Config
-	}{
-		{name: "test1",
-			fields: fields{
-				Gravity:         newDefaultGravityConfig(),
-				Logrange:        newDefaultLograngeConfig(),
-				SyncIntervalSec: 123,
+
+	want := &Config{
+		Gravity: &gravity{
+			ApiListenAddr: "127.0.0.123:1234",
+			Kubernetes: &k8s.Config{
+				Namespace:              "gravity",
+				ForwarderConfigMapName: "log-forwarders",
 			},
-			args: args{
-				other: &Config{
-					Gravity: &gravity{
-						ApiListenAddr: "127.0.0.123:1234",
-						Kubernetes:    &k8s.Config{Namespace: "gravity"},
-					},
-					Logrange: &logrange{
-						Partition:         "partition",
-						Kubernetes:        &k8s.Config{Namespace: "logrange"},
-						ForwarderTmplFile: "file1",
-						Transport:         &transport.Config{Tls2Way: utils.BoolPtr(true)},
-					},
-				},
+		},
+		Logrange: &logrange{
+			Partition:         "partition",
+			ForwarderTmplFile: "file1",
+			Kubernetes: &k8s.Config{
+				Namespace:              "logrange",
+				ForwarderConfigMapName: "lr-forwarder",
 			},
-			want: &Config{
-				Gravity: &gravity{
-					ApiListenAddr: "127.0.0.123:1234",
-					Kubernetes: &k8s.Config{
-						Namespace:              "gravity",
-						ForwarderConfigMapName: "log-forwarders",
-					},
-				},
-				Logrange: &logrange{
-					Partition:         "partition",
-					ForwarderTmplFile: "file1",
-					Kubernetes: &k8s.Config{
-						Namespace:              "logrange",
-						ForwarderConfigMapName: "lr-forwarder",
-					},
-					Transport: &transport.Config{
-						ListenAddr: "127.0.0.1:9966",
-						Tls2Way:    utils.BoolPtr(true),
-					},
-				},
-				SyncIntervalSec: 123,
-			}},
+			Transport: &transport.Config{
+				ListenAddr: "127.0.0.1:9966",
+				Tls2Way:    utils.BoolPtr(true),
+			},
+		},
+		SyncIntervalSec: 123,
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := &Config{
-				Gravity:         tt.fields.Gravity,
-				Logrange:        tt.fields.Logrange,
-				SyncIntervalSec: tt.fields.SyncIntervalSec,
-			}
-			c.Merge(tt.args.other)
-			if !reflect.DeepEqual(c, tt.want) {
-				t.Errorf("Config.Merge() = %v, want %v", c, tt.want)
-			}
-		})
+
+	c := &Config{
+		Gravity:         newDefaultGravityConfig(),
+		Logrange:        newDefaultLograngeConfig(),
+		SyncIntervalSec: 123,
+	}
+
+	c.Merge(other)
+	if !reflect.DeepEqual(c, want) {
+		t.Errorf("Config.Merge() = %v, want %v", c, want)
 	}
 }
 
@@ -137,7 +111,7 @@ func TestConfig_Check(t *testing.T) {
 		fields  fields
 		wantErr error
 	}{
-		{name: "test1",
+		{name: "check config ok",
 			fields: fields{
 				Gravity:         newDefaultGravityConfig(),
 				Logrange:        newDefaultLograngeConfig(),
@@ -146,7 +120,7 @@ func TestConfig_Check(t *testing.T) {
 			wantErr: nil,
 		},
 
-		{name: "test2",
+		{name: "check invalid Gravity err",
 			fields: fields{
 				Gravity:         nil,
 				Logrange:        newDefaultLograngeConfig(),
@@ -155,7 +129,7 @@ func TestConfig_Check(t *testing.T) {
 			wantErr: errors.New("invalid Gravity"),
 		},
 
-		{name: "test3",
+		{name: "check invalid Logrange err",
 			fields: fields{
 				Gravity:         newDefaultGravityConfig(),
 				Logrange:        nil,
@@ -164,7 +138,7 @@ func TestConfig_Check(t *testing.T) {
 			wantErr: errors.New("invalid Logrange"),
 		},
 
-		{name: "test4",
+		{name: "check invalid SyncIntervalSec err",
 			fields: fields{
 				Gravity:         newDefaultGravityConfig(),
 				Logrange:        newDefaultLograngeConfig(),
@@ -199,46 +173,19 @@ func TestConfig_Check(t *testing.T) {
 }
 
 func Test_gravity_merge(t *testing.T) {
-	type fields struct {
-		ApiListenAddr string
-		Kubernetes    *k8s.Config
-	}
-	type args struct {
-		other *gravity
-	}
-
 	defaultGravityCfg := newDefaultGravityConfig()
 	mergeGravityCfg := &gravity{
 		ApiListenAddr: "127.0.0.123:1234",
 		Kubernetes:    &k8s.Config{Namespace: "gravity", ForwarderConfigMapName: "cmName"},
 	}
 
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   *gravity
-	}{
-		{name: "test1",
-			fields: fields{
-				ApiListenAddr: defaultGravityCfg.ApiListenAddr,
-				Kubernetes:    defaultGravityCfg.Kubernetes,
-			},
-			args: args{other: mergeGravityCfg},
-			want: mergeGravityCfg,
-		},
+	g := &gravity{
+		ApiListenAddr: defaultGravityCfg.ApiListenAddr,
+		Kubernetes:    defaultGravityCfg.Kubernetes,
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := &gravity{
-				ApiListenAddr: tt.fields.ApiListenAddr,
-				Kubernetes:    tt.fields.Kubernetes,
-			}
-			g.merge(tt.args.other)
-			if !reflect.DeepEqual(g, tt.want) {
-				t.Errorf("gravity.merge() = %v, want %v", g, tt.want)
-			}
-		})
+	g.merge(mergeGravityCfg)
+	if !reflect.DeepEqual(g, mergeGravityCfg) {
+		t.Errorf("gravity.merge() = %v, want %v", g, mergeGravityCfg)
 	}
 }
 
@@ -254,7 +201,7 @@ func Test_gravity_check(t *testing.T) {
 		fields  fields
 		wantErr error
 	}{
-		{name: "test1",
+		{name: "check config ok",
 			fields: fields{
 				ApiListenAddr: defaultGravityCfg.ApiListenAddr,
 				Kubernetes:    defaultGravityCfg.Kubernetes,
@@ -262,7 +209,7 @@ func Test_gravity_check(t *testing.T) {
 			wantErr: nil,
 		},
 
-		{name: "test2",
+		{name: "check invalid ApiListenAddr err",
 			fields: fields{
 				ApiListenAddr: "",
 				Kubernetes:    defaultGravityCfg.Kubernetes,
@@ -270,7 +217,7 @@ func Test_gravity_check(t *testing.T) {
 			wantErr: errors.New("invalid ApiListenAddr"),
 		},
 
-		{name: "test3",
+		{name: "check invalid Kubernetes err",
 			fields: fields{
 				ApiListenAddr: defaultGravityCfg.ApiListenAddr,
 				Kubernetes:    nil,
@@ -293,18 +240,6 @@ func Test_gravity_check(t *testing.T) {
 }
 
 func Test_logrange_merge(t *testing.T) {
-	type fields struct {
-		CronQueries       []cronQuery
-		Partition         string
-		ForwarderTmplFile string
-		Kubernetes        *k8s.Config
-		Transport         *transport.Config
-	}
-	type args struct {
-		other *logrange
-	}
-
-	defaultLograngeCfg := newDefaultLograngeConfig()
 	mergeLograngeCfg := &logrange{
 		Partition:         "partition",
 		ForwarderTmplFile: "file1",
@@ -323,41 +258,18 @@ func Test_logrange_merge(t *testing.T) {
 		},
 	}
 
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   *logrange
-	}{
-		{name: "test1",
-			fields: fields{
-				CronQueries:       defaultLograngeCfg.CronQueries,
-				Partition:         defaultLograngeCfg.Partition,
-				ForwarderTmplFile: defaultLograngeCfg.ForwarderTmplFile,
-				Kubernetes:        defaultLograngeCfg.Kubernetes,
-				Transport:         defaultLograngeCfg.Transport,
-			},
-			args: args{
-				other: mergeLograngeCfg,
-			},
-			want: mergeLograngeCfg,
-		},
+	defaultLograngeCfg := newDefaultLograngeConfig()
+	l := &logrange{
+		CronQueries:       defaultLograngeCfg.CronQueries,
+		Partition:         defaultLograngeCfg.Partition,
+		ForwarderTmplFile: defaultLograngeCfg.ForwarderTmplFile,
+		Kubernetes:        defaultLograngeCfg.Kubernetes,
+		Transport:         defaultLograngeCfg.Transport,
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			l := &logrange{
-				CronQueries:       tt.fields.CronQueries,
-				Partition:         tt.fields.Partition,
-				ForwarderTmplFile: tt.fields.ForwarderTmplFile,
-				Kubernetes:        tt.fields.Kubernetes,
-				Transport:         tt.fields.Transport,
-			}
 
-			l.merge(tt.args.other)
-			if !reflect.DeepEqual(l, tt.want) {
-				t.Errorf("logrange.merge() = %v, want %v", l, tt.want)
-			}
-		})
+	l.merge(mergeLograngeCfg)
+	if !reflect.DeepEqual(l, mergeLograngeCfg) {
+		t.Errorf("logrange.merge() = %v, want %v", l, mergeLograngeCfg)
 	}
 }
 
@@ -376,7 +288,7 @@ func Test_logrange_check(t *testing.T) {
 		fields  fields
 		wantErr error
 	}{
-		{name: "test1",
+		{name: "check config ok",
 			fields: fields{
 				CronQueries:       defaultLograngeCfg.CronQueries,
 				Partition:         defaultLograngeCfg.Partition,
@@ -387,7 +299,7 @@ func Test_logrange_check(t *testing.T) {
 			wantErr: nil,
 		},
 
-		{name: "test2",
+		{name: "check invalid Partition err",
 			fields: fields{
 				Partition:         "",
 				ForwarderTmplFile: defaultLograngeCfg.ForwarderTmplFile,
@@ -397,7 +309,7 @@ func Test_logrange_check(t *testing.T) {
 			wantErr: errors.New("invalid Partition"),
 		},
 
-		{name: "test3",
+		{name: "check invalid ForwarderTmplFile err",
 			fields: fields{
 				Partition:         defaultLograngeCfg.Partition,
 				ForwarderTmplFile: "",
@@ -407,7 +319,7 @@ func Test_logrange_check(t *testing.T) {
 			wantErr: errors.New("invalid ForwarderTmplFile"),
 		},
 
-		{name: "test4",
+		{name: "check invalid Kubernetes err",
 			fields: fields{
 				Partition:         defaultLograngeCfg.Partition,
 				ForwarderTmplFile: defaultLograngeCfg.ForwarderTmplFile,
@@ -417,7 +329,7 @@ func Test_logrange_check(t *testing.T) {
 			wantErr: errors.New("invalid Kubernetes"),
 		},
 
-		{name: "test5",
+		{name: "check invalid Transport err",
 			fields: fields{
 				Partition:         defaultLograngeCfg.Partition,
 				ForwarderTmplFile: defaultLograngeCfg.ForwarderTmplFile,

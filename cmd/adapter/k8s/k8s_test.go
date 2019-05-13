@@ -27,125 +27,95 @@ import (
 )
 
 func TestClient_filterInvalidCfgs(t *testing.T) {
-	type args struct {
-		grFwdCfgs []*gravityForwarderCfg
+	grFwdCfgs := []*gravityForwarderCfg{
+		{Metadata: struct {
+			Name string `yaml:"name"`
+		}{Name: "name1"}},
+		{Metadata: struct {
+			Name string `yaml:"name"`
+		}{Name: "name2"},
+			Spec: struct {
+				Address  string `yaml:"address"`
+				Protocol string `yaml:"protocol,omitempty"`
+			}{Address: "127.0.0.2", Protocol: ""},
+		}}
+
+	want := []*gravityForwarderCfg{
+		{Metadata: struct {
+			Name string `yaml:"name"`
+		}{Name: "name2"},
+			Spec: struct {
+				Address  string `yaml:"address"`
+				Protocol string `yaml:"protocol,omitempty"`
+			}{Address: "127.0.0.2", Protocol: ""},
+		}}
+
+	cli := &Client{
+		logger: log.WithField("test", "filterInvalidCfgs()"),
 	}
-	tests := []struct {
-		name string
-		args args
-		want []*gravityForwarderCfg
-	}{
-		{name: "test1",
-			args: args{grFwdCfgs: []*gravityForwarderCfg{
-				{Metadata: struct {
-					Name string `yaml:"name"`
-				}{Name: "name1"}},
-				{Metadata: struct {
-					Name string `yaml:"name"`
-				}{Name: "name2"},
-					Spec: struct {
-						Address  string `yaml:"address"`
-						Protocol string `yaml:"protocol,omitempty"`
-					}{Address: "127.0.0.2", Protocol: ""},
-				}}},
-			want: []*gravityForwarderCfg{
-				{Metadata: struct {
-					Name string `yaml:"name"`
-				}{Name: "name2"},
-					Spec: struct {
-						Address  string `yaml:"address"`
-						Protocol string `yaml:"protocol,omitempty"`
-					}{Address: "127.0.0.2", Protocol: ""},
-				}}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cli := &Client{
-				logger: log.WithField("test", "filterInvalidCfgs()"),
-			}
-			if got := cli.filterInvalidCfgs(tt.args.grFwdCfgs); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Client.filterInvalidCfgs() = %v, want %v", got, tt.want)
-			}
-		})
+	if got := cli.filterInvalidCfgs(grFwdCfgs); !reflect.DeepEqual(got, want) {
+		t.Errorf("Client.filterInvalidCfgs() = %v, want %v", got, want)
 	}
 }
 
 func TestClient_mergeFwdConfigs(t *testing.T) {
-	type args struct {
-		lrFwdCfg  *forwarder.Config
-		grFwdCfgs []*gravityForwarderCfg
-		wCfgTmpl  *forwarder.WorkerConfig
+
+	wCfgTmpl := &forwarder.WorkerConfig{
+		Name: "default",
+		Pipe: &forwarder.PipeConfig{Name: "pipe"},
+		Sink: &sink.Config{Type: "syslog", Params: map[string]interface{}{
+			"Protocol": "tcp",
+		}},
 	}
-	tests := []struct {
-		name string
-		args args
-		want *forwarder.Config
-	}{
-		{name: "test1",
-			args: args{
-				//wCfgTmpl
-				wCfgTmpl: &forwarder.WorkerConfig{
-					Name: "default",
-					Pipe: &forwarder.PipeConfig{Name: "pipe"},
-					Sink: &sink.Config{Type: "syslog", Params: map[string]interface{}{
-						"Protocol": "tcp",
-					}},
+
+	grFwdCfgs := []*gravityForwarderCfg{
+		//0
+		{Metadata: struct {
+			Name string `yaml:"name"`
+		}{Name: "name1"},
+			Spec: struct {
+				Address  string `yaml:"address"`
+				Protocol string `yaml:"protocol,omitempty"`
+			}{Address: "127.0.0.1", Protocol: "udp"}},
+		//1
+		{Metadata: struct {
+			Name string `yaml:"name"`
+		}{Name: "name2"},
+			Spec: struct {
+				Address  string `yaml:"address"`
+				Protocol string `yaml:"protocol,omitempty"`
+			}{Address: "127.0.0.2", Protocol: ""},
+		}}
+
+	lrFwdCfg := &forwarder.Config{}
+	want := &forwarder.Config{
+		Workers: []*forwarder.WorkerConfig{{
+			Name: "name1",
+			Pipe: &forwarder.PipeConfig{Name: "pipe"},
+			Sink: &sink.Config{
+				Type: "syslog",
+				Params: map[string]interface{}{
+					"Protocol":   "udp",
+					"RemoteAddr": "127.0.0.1",
 				},
-				//grFwdCfgs
-				grFwdCfgs: []*gravityForwarderCfg{
-					//0
-					{Metadata: struct {
-						Name string `yaml:"name"`
-					}{Name: "name1"},
-						Spec: struct {
-							Address  string `yaml:"address"`
-							Protocol string `yaml:"protocol,omitempty"`
-						}{Address: "127.0.0.1", Protocol: "udp"}},
-					//1
-					{Metadata: struct {
-						Name string `yaml:"name"`
-					}{Name: "name2"},
-						Spec: struct {
-							Address  string `yaml:"address"`
-							Protocol string `yaml:"protocol,omitempty"`
-						}{Address: "127.0.0.2", Protocol: ""},
-					}},
-				//lrFwdCfg
-				lrFwdCfg: &forwarder.Config{},
 			},
-			want: &forwarder.Config{
-				Workers: []*forwarder.WorkerConfig{{
-					Name: "name1",
-					Pipe: &forwarder.PipeConfig{Name: "pipe"},
-					Sink: &sink.Config{
-						Type: "syslog",
-						Params: map[string]interface{}{
-							"Protocol":   "udp",
-							"RemoteAddr": "127.0.0.1",
-						},
-					},
-				}, {
-					Name: "name2",
-					Pipe: &forwarder.PipeConfig{Name: "pipe"},
-					Sink: &sink.Config{
-						Type: "syslog",
-						Params: map[string]interface{}{
-							"Protocol":   "tcp",
-							"RemoteAddr": "127.0.0.2",
-						},
-					},
-				}},
+		}, {
+			Name: "name2",
+			Pipe: &forwarder.PipeConfig{Name: "pipe"},
+			Sink: &sink.Config{
+				Type: "syslog",
+				Params: map[string]interface{}{
+					"Protocol":   "tcp",
+					"RemoteAddr": "127.0.0.2",
+				},
 			},
-		},
+		}},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cli := &Client{}
-			got, _ := cli.mergeFwdConfigs(tt.args.lrFwdCfg, tt.args.grFwdCfgs, tt.args.wCfgTmpl)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Client.mergeFwdConfigs() = %v, want %v", got, tt.want)
-			}
-		})
+
+	cli := &Client{}
+	got, _ := cli.mergeFwdConfigs(lrFwdCfg, grFwdCfgs, wCfgTmpl)
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Client.mergeFwdConfigs() = %v, want %v", got, want)
 	}
 }
 
@@ -163,12 +133,12 @@ func TestConfig_Merge(t *testing.T) {
 		args   args
 		want   *Config
 	}{
-		{name: "test1",
+		{name: "check merge one param ok",
 			fields: fields{Namespace: "ns", ForwarderConfigMapName: "cmName"},
 			args:   args{other: &Config{Namespace: "ns1"}},
 			want:   &Config{Namespace: "ns1", ForwarderConfigMapName: "cmName"},
 		},
-		{name: "test2",
+		{name: "check merge all params ok",
 			fields: fields{Namespace: "ns", ForwarderConfigMapName: "cmName"},
 			args:   args{other: &Config{Namespace: "ns1", ForwarderConfigMapName: "cmName1"}},
 			want:   &Config{Namespace: "ns1", ForwarderConfigMapName: "cmName1"},
@@ -198,15 +168,15 @@ func TestConfig_Check(t *testing.T) {
 		fields  fields
 		wantErr error
 	}{
-		{name: "test1",
+		{name: "check invalid Namespace err",
 			fields:  fields{Namespace: "", ForwarderConfigMapName: "cmName"},
 			wantErr: errors.New("invalid Namespace"),
 		},
-		{name: "test2",
+		{name: "check invalid ForwarderConfigMapName err",
 			fields:  fields{Namespace: "ns", ForwarderConfigMapName: ""},
 			wantErr: errors.New("invalid ForwarderConfigMapName"),
 		},
-		{name: "test3",
+		{name: "check config ok",
 			fields:  fields{Namespace: "ns", ForwarderConfigMapName: "cmName"},
 			wantErr: nil,
 		},

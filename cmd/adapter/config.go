@@ -31,7 +31,7 @@ type (
 
 	// Represents Gravity configuration
 	gravity struct {
-		// Address which http server listens
+		// Address on which http server listens
 		ApiListenAddr string
 		// K8s config
 		Kubernetes *k8s.Config
