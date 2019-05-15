@@ -56,11 +56,10 @@ data:
         },
         "Transport": {
           "ListenAddr": "lr-aggregator.kube-system.svc.cluster.local:9966",
-          "TlsEnabled": false,
-          "Tls2Way": false,
-          "TlsCertFile": "/opt/logrange/gravity/config/tls/client.crt",
-          "TlsKeyFile": "/opt/logrange/gravity/config/tls/client.key",
-          "TlsCAFile": "/opt/logrange/gravity/config/tls/ca.pem"
+          "TlsEnabled": true,
+          "TlsCertFile": "/var/state/log-collector.cert",
+          "TlsKeyFile": "/var/state/log-collector.key",
+          "TlsCAFile": "/var/state/root.cert"
         }
       },
 
@@ -113,6 +112,8 @@ spec:
     spec:
       securityContext:
         runAsUser: 0
+      nodeSelector:
+        gravitational.io/k8s-role: master
       containers:
         - name: log-collector
           image: log-adapter:0.1.0
@@ -128,6 +129,8 @@ spec:
               mountPath: /ext/docker/containers
             - name: varlog
               mountPath: /var/log
+            - name: varstate
+              mountPath: /var/state
       volumes:
         - name: config
           configMap:
@@ -138,3 +141,6 @@ spec:
         - name: varlog
           hostPath:
             path: /var/log
+        - name: varstate
+          hostPath:
+            path: /var/state
