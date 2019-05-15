@@ -34,8 +34,8 @@ data:
         "ListenAddr": "0.0.0.0:9966",
         "TlsEnabled": true,
         "Tls2Way": true,
-        "TlsCertFile": "/var/state/lr-aggregator.cert",
-        "TlsKeyFile": "/var/state/lr-aggregator.key",
+        "TlsCertFile": "/var/state/logrange-aggregator.cert",
+        "TlsKeyFile": "/var/state/logrange-aggregator.key",
         "TlsCAFile": "/var/state/root.cert"
       },
       "JrnlCtrlConfig": {

@@ -57,8 +57,8 @@ data:
         "Transport": {
           "ListenAddr": "lr-aggregator.kube-system.svc.cluster.local:9966",
           "TlsEnabled": true,
-          "TlsCertFile": "/var/state/log-collector.cert",
-          "TlsKeyFile": "/var/state/log-collector.key",
+          "TlsCertFile": "/var/state/logrange-adaptor.cert",
+          "TlsKeyFile": "/var/state/logrange-adaptor.key",
           "TlsCAFile": "/var/state/root.cert"
         }
       },
