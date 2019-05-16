@@ -26,7 +26,7 @@ metadata:
 data:
   logrange.json: |
     {
-      "BaseDir": "/var/lib/logrange/data/",
+      "BaseDir": "/var/lib/gravity/logrange/data/",
       "HostHostId": 0,
       "HostLeaseTTLSec": 5,
       "HostRegisterTimeoutSec": 0,
@@ -98,8 +98,8 @@ spec:
               mountPath: /opt/logrange/config
             - name: extdockercontainers
               mountPath: /ext/docker/containers
-            - name: varliblogrange
-              mountPath: /var/lib/logrange
+            - name: varlibgravitylogrange
+              mountPath: /var/lib/gravity/logrange
             - name: varlog
               mountPath: /var/log
             - name: varstate
@@ -111,9 +111,9 @@ spec:
         - name: extdockercontainers
           hostPath:
             path: /ext/docker/containers
-        - name: varliblogrange
+        - name: varlibgravitylogrange
           hostPath:
-            path: /var/lib/logrange
+            path: /var/lib/gravity/logrange
             type: DirectoryOrCreate
         - name: varlog
           hostPath:
