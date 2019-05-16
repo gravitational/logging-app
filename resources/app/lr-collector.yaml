@@ -56,7 +56,7 @@ data:
       },
       "Storage": {
         "Type": "file",
-        "Location": "/var/lib/logrange/lr/storage/"
+        "Location": "/var/lib/gravity/logrange/lr/storage/"
       }
     }
 
@@ -96,8 +96,8 @@ spec:
               mountPath: /ext/docker/containers
             - name: varlibgravitysite
               mountPath: /var/lib/gravity/site
-            - name: varliblogrange
-              mountPath: /var/lib/logrange
+            - name: varlibgravitylogrange
+              mountPath: /var/lib/gravity/logrange
             - name: varlog
               mountPath: /var/log
             - name: varstate
@@ -112,9 +112,9 @@ spec:
         - name: varlibgravitysite
           hostPath:
             path: /var/lib/gravity/site
-        - name: varliblogrange
+        - name: varlibgravitylogrange
           hostPath:
-            path: /var/lib/logrange
+            path: /var/lib/gravity/logrange
             type: DirectoryOrCreate
         - name: varlog
           hostPath:
