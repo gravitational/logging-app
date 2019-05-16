@@ -56,14 +56,17 @@ func TestServer_buildQueryRequest(t *testing.T) {
 		args args
 		want *api.QueryRequest
 	}{
-		{name: "build tail request ok", args: args{q: "file:f1 or pod:p1", pos: "tail", limit: 123, offset: -10},
+		{
+			name: "build tail request ok",
+			args: args{q: "file:f1 or pod:p1", pos: "tail", limit: 123, offset: -10},
 			want: &api.QueryRequest{
 				Limit: 123, Offset: -10, Pos: "tail",
 				Query: "SELECT FROM partition WHERE (fields:cid=\"f1\" OR fields:pod=\"p1\") OR " +
 					"fields:file CONTAINS \"f1\" OFFSET -10 LIMIT 123",
 			},
 		},
-		{name: "build head request ok", args: args{q: "file:f1 or pod:p1", pos: "head", limit: 123, offset: 10},
+		{
+			name: "build head request ok", args: args{q: "file:f1 or pod:p1", pos: "head", limit: 123, offset: 10},
 			want: &api.QueryRequest{
 				Limit: 123, Offset: 10, Pos: "head",
 				Query: "SELECT FROM partition WHERE (fields:cid=\"f1\" OR fields:pod=\"p1\") OR " +
@@ -76,7 +79,8 @@ func TestServer_buildQueryRequest(t *testing.T) {
 			s := &Server{
 				lrPartition: "partition",
 			}
-			if got := s.buildQueryRequest(tt.args.q, tt.args.pos, tt.args.limit, tt.args.offset); !reflect.DeepEqual(got, tt.want) {
+			if got := s.buildQueryRequest(tt.args.q,
+				tt.args.pos, tt.args.limit, tt.args.offset); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Server.buildQueryRequest() = %v, want %v", got, tt.want)
 			}
 		})

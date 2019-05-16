@@ -123,7 +123,7 @@ func (s *Server) Serve(ctx context.Context) error {
 }
 
 // Shutdown gracefully shuts down the server.
-// It blocks until the server has shut down of context has expired.
+// It blocks until the server has shut down or context has expired.
 func (s *Server) Shutdown(ctx context.Context) error {
 	err := s.server.Shutdown(ctx)
 	if err != nil {
@@ -201,7 +201,7 @@ func (s *Server) logHandler(ctx context.Context, rw http.ResponseWriter, rq *htt
 // In case of error it returns the error so it's up to caller to handle it properly,
 // e.g. return appropriate HTTP code.
 //
-// Please note, that if an errors occur after a few successful response writes
+// Please note, that if errors occur after a few successful response writes
 // end user will not get all the requested data, though the http code will be 200.
 // In order to let client know about the interrupted response, the connection (if yet alive)
 // is explicitly closed/reset depending on the HTTP protocol, so the client can detect this

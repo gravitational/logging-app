@@ -28,27 +28,35 @@ import (
 
 func TestClient_filterInvalidCfgs(t *testing.T) {
 	grFwdCfgs := []*gravityForwarderCfg{
-		{Metadata: struct {
-			Name string `yaml:"name"`
-		}{Name: "name1"}},
-		{Metadata: struct {
-			Name string `yaml:"name"`
-		}{Name: "name2"},
+		{
+			Metadata: struct {
+				Name string `yaml:"name"`
+			}{Name: "name1"},
+		},
+		{
+			Metadata: struct {
+				Name string `yaml:"name"`
+			}{Name: "name2"},
+
 			Spec: struct {
 				Address  string `yaml:"address"`
 				Protocol string `yaml:"protocol,omitempty"`
 			}{Address: "127.0.0.2", Protocol: ""},
-		}}
+		},
+	}
 
 	want := []*gravityForwarderCfg{
-		{Metadata: struct {
-			Name string `yaml:"name"`
-		}{Name: "name2"},
+		{
+			Metadata: struct {
+				Name string `yaml:"name"`
+			}{Name: "name2"},
+
 			Spec: struct {
 				Address  string `yaml:"address"`
 				Protocol string `yaml:"protocol,omitempty"`
 			}{Address: "127.0.0.2", Protocol: ""},
-		}}
+		},
+	}
 
 	cli := &Client{
 		logger: log.WithField("test", "filterInvalidCfgs()"),
@@ -69,47 +77,54 @@ func TestClient_mergeFwdConfigs(t *testing.T) {
 	}
 
 	grFwdCfgs := []*gravityForwarderCfg{
-		//0
-		{Metadata: struct {
-			Name string `yaml:"name"`
-		}{Name: "name1"},
+		{
+			Metadata: struct {
+				Name string `yaml:"name"`
+			}{Name: "name1"},
+
 			Spec: struct {
 				Address  string `yaml:"address"`
 				Protocol string `yaml:"protocol,omitempty"`
-			}{Address: "127.0.0.1", Protocol: "udp"}},
-		//1
-		{Metadata: struct {
-			Name string `yaml:"name"`
-		}{Name: "name2"},
+			}{Address: "127.0.0.1", Protocol: "udp"},
+		},
+		{
+			Metadata: struct {
+				Name string `yaml:"name"`
+			}{Name: "name2"},
+
 			Spec: struct {
 				Address  string `yaml:"address"`
 				Protocol string `yaml:"protocol,omitempty"`
 			}{Address: "127.0.0.2", Protocol: ""},
-		}}
+		},
+	}
 
 	lrFwdCfg := &forwarder.Config{}
 	want := &forwarder.Config{
-		Workers: []*forwarder.WorkerConfig{{
-			Name: "name1",
-			Pipe: &forwarder.PipeConfig{Name: "pipe"},
-			Sink: &sink.Config{
-				Type: "syslog",
-				Params: map[string]interface{}{
-					"Protocol":   "udp",
-					"RemoteAddr": "127.0.0.1",
+		Workers: []*forwarder.WorkerConfig{
+			{
+				Name: "name1",
+				Pipe: &forwarder.PipeConfig{Name: "pipe"},
+				Sink: &sink.Config{
+					Type: "syslog",
+					Params: map[string]interface{}{
+						"Protocol":   "udp",
+						"RemoteAddr": "127.0.0.1",
+					},
 				},
 			},
-		}, {
-			Name: "name2",
-			Pipe: &forwarder.PipeConfig{Name: "pipe"},
-			Sink: &sink.Config{
-				Type: "syslog",
-				Params: map[string]interface{}{
-					"Protocol":   "tcp",
-					"RemoteAddr": "127.0.0.2",
+			{
+				Name: "name2",
+				Pipe: &forwarder.PipeConfig{Name: "pipe"},
+				Sink: &sink.Config{
+					Type: "syslog",
+					Params: map[string]interface{}{
+						"Protocol":   "tcp",
+						"RemoteAddr": "127.0.0.2",
+					},
 				},
 			},
-		}},
+		},
 	}
 
 	cli := &Client{}
@@ -133,12 +148,14 @@ func TestConfig_Merge(t *testing.T) {
 		args   args
 		want   *Config
 	}{
-		{name: "check merge one param ok",
+		{
+			name:   "check merge one param ok",
 			fields: fields{Namespace: "ns", ForwarderConfigMapName: "cmName"},
 			args:   args{other: &Config{Namespace: "ns1"}},
 			want:   &Config{Namespace: "ns1", ForwarderConfigMapName: "cmName"},
 		},
-		{name: "check merge all params ok",
+		{
+			name:   "check merge all params ok",
 			fields: fields{Namespace: "ns", ForwarderConfigMapName: "cmName"},
 			args:   args{other: &Config{Namespace: "ns1", ForwarderConfigMapName: "cmName1"}},
 			want:   &Config{Namespace: "ns1", ForwarderConfigMapName: "cmName1"},
@@ -168,15 +185,18 @@ func TestConfig_Check(t *testing.T) {
 		fields  fields
 		wantErr error
 	}{
-		{name: "check invalid Namespace err",
+		{
+			name:    "check invalid Namespace err",
 			fields:  fields{Namespace: "", ForwarderConfigMapName: "cmName"},
 			wantErr: errors.New("invalid Namespace"),
 		},
-		{name: "check invalid ForwarderConfigMapName err",
+		{
+			name:    "check invalid ForwarderConfigMapName err",
 			fields:  fields{Namespace: "ns", ForwarderConfigMapName: ""},
 			wantErr: errors.New("invalid ForwarderConfigMapName"),
 		},
-		{name: "check config ok",
+		{
+			name:    "check config ok",
 			fields:  fields{Namespace: "ns", ForwarderConfigMapName: "cmName"},
 			wantErr: nil,
 		},

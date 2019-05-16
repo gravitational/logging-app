@@ -35,7 +35,12 @@ func TestLoadCfgFromFile(t *testing.T) {
 	// write
 	cfg := NewDefaultConfig()
 	bb, _ := json.Marshal(cfg)
-	fd, _ := writeTmpJsonFile(bb)
+	fd, err := writeTmpJsonFile(bb)
+	if err != nil {
+		t.Errorf("writeTmpJsonFile() error = %v", err)
+		return
+	}
+
 	defer os.Remove(fd.Name())
 
 	// read
@@ -111,7 +116,8 @@ func TestConfig_Check(t *testing.T) {
 		fields  fields
 		wantErr error
 	}{
-		{name: "check config ok",
+		{
+			name: "check config ok",
 			fields: fields{
 				Gravity:         newDefaultGravityConfig(),
 				Logrange:        newDefaultLograngeConfig(),
@@ -119,8 +125,8 @@ func TestConfig_Check(t *testing.T) {
 			},
 			wantErr: nil,
 		},
-
-		{name: "check invalid Gravity err",
+		{
+			name: "check invalid Gravity err",
 			fields: fields{
 				Gravity:         nil,
 				Logrange:        newDefaultLograngeConfig(),
@@ -128,8 +134,8 @@ func TestConfig_Check(t *testing.T) {
 			},
 			wantErr: errors.New("invalid Gravity"),
 		},
-
-		{name: "check invalid Logrange err",
+		{
+			name: "check invalid Logrange err",
 			fields: fields{
 				Gravity:         newDefaultGravityConfig(),
 				Logrange:        nil,
@@ -137,8 +143,8 @@ func TestConfig_Check(t *testing.T) {
 			},
 			wantErr: errors.New("invalid Logrange"),
 		},
-
-		{name: "check invalid SyncIntervalSec err",
+		{
+			name: "check invalid SyncIntervalSec err",
 			fields: fields{
 				Gravity:         newDefaultGravityConfig(),
 				Logrange:        newDefaultLograngeConfig(),
@@ -159,7 +165,12 @@ func TestConfig_Check(t *testing.T) {
 			if c.Logrange != nil && c.Logrange.ForwarderTmplFile != "" {
 				cfg := forwarder.NewDefaultConfig()
 				bb, _ := json.Marshal(cfg)
-				fd, _ := writeTmpJsonFile(bb)
+				fd, err := writeTmpJsonFile(bb)
+				if err != nil {
+					t.Errorf("writeTmpJsonFile() error = %v", err)
+					return
+				}
+
 				defer os.Remove(fd.Name())
 				c.Logrange.ForwarderTmplFile = fd.Name()
 			}
@@ -201,23 +212,24 @@ func Test_gravity_check(t *testing.T) {
 		fields  fields
 		wantErr error
 	}{
-		{name: "check config ok",
+		{
+			name: "check config ok",
 			fields: fields{
 				ApiListenAddr: defaultGravityCfg.ApiListenAddr,
 				Kubernetes:    defaultGravityCfg.Kubernetes,
 			},
 			wantErr: nil,
 		},
-
-		{name: "check invalid ApiListenAddr err",
+		{
+			name: "check invalid ApiListenAddr err",
 			fields: fields{
 				ApiListenAddr: "",
 				Kubernetes:    defaultGravityCfg.Kubernetes,
 			},
 			wantErr: errors.New("invalid ApiListenAddr"),
 		},
-
-		{name: "check invalid Kubernetes err",
+		{
+			name: "check invalid Kubernetes err",
 			fields: fields{
 				ApiListenAddr: defaultGravityCfg.ApiListenAddr,
 				Kubernetes:    nil,
@@ -288,7 +300,8 @@ func Test_logrange_check(t *testing.T) {
 		fields  fields
 		wantErr error
 	}{
-		{name: "check config ok",
+		{
+			name: "check config ok",
 			fields: fields{
 				CronQueries:       defaultLograngeCfg.CronQueries,
 				Partition:         defaultLograngeCfg.Partition,
@@ -298,8 +311,8 @@ func Test_logrange_check(t *testing.T) {
 			},
 			wantErr: nil,
 		},
-
-		{name: "check invalid Partition err",
+		{
+			name: "check invalid Partition err",
 			fields: fields{
 				Partition:         "",
 				ForwarderTmplFile: defaultLograngeCfg.ForwarderTmplFile,
@@ -308,8 +321,8 @@ func Test_logrange_check(t *testing.T) {
 			},
 			wantErr: errors.New("invalid Partition"),
 		},
-
-		{name: "check invalid ForwarderTmplFile err",
+		{
+			name: "check invalid ForwarderTmplFile err",
 			fields: fields{
 				Partition:         defaultLograngeCfg.Partition,
 				ForwarderTmplFile: "",
@@ -318,8 +331,8 @@ func Test_logrange_check(t *testing.T) {
 			},
 			wantErr: errors.New("invalid ForwarderTmplFile"),
 		},
-
-		{name: "check invalid Kubernetes err",
+		{
+			name: "check invalid Kubernetes err",
 			fields: fields{
 				Partition:         defaultLograngeCfg.Partition,
 				ForwarderTmplFile: defaultLograngeCfg.ForwarderTmplFile,
@@ -328,8 +341,8 @@ func Test_logrange_check(t *testing.T) {
 			},
 			wantErr: errors.New("invalid Kubernetes"),
 		},
-
-		{name: "check invalid Transport err",
+		{
+			name: "check invalid Transport err",
 			fields: fields{
 				Partition:         defaultLograngeCfg.Partition,
 				ForwarderTmplFile: defaultLograngeCfg.ForwarderTmplFile,
@@ -353,7 +366,12 @@ func Test_logrange_check(t *testing.T) {
 			if l.ForwarderTmplFile != "" {
 				cfg := forwarder.NewDefaultConfig()
 				bb, _ := json.Marshal(cfg)
-				fd, _ := writeTmpJsonFile(bb)
+				fd, err := writeTmpJsonFile(bb)
+				if err != nil {
+					t.Errorf("writeTmpJsonFile() error = %v", err)
+					return
+				}
+
 				defer os.Remove(fd.Name())
 				l.ForwarderTmplFile = fd.Name()
 			}
@@ -367,7 +385,10 @@ func Test_logrange_check(t *testing.T) {
 }
 
 func writeTmpJsonFile(bb []byte) (*os.File, error) {
-	tmpFile, _ := ioutil.TempFile(os.TempDir(), "test-")
-	_, err := tmpFile.Write(bb)
+	tmpFile, err := ioutil.TempFile(os.TempDir(), "test-")
+	if err != nil {
+		return nil, err
+	}
+	_, err = tmpFile.Write(bb)
 	return tmpFile, err
 }
