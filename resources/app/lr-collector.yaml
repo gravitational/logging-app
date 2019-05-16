@@ -49,11 +49,10 @@ data:
       },
       "Transport": {
         "ListenAddr": "lr-aggregator.kube-system.svc.cluster.local:9966",
-        "TlsEnabled": false,
-        "Tls2Way": false,
-        "TlsCertFile": "/opt/logrange/lr/config/tls/client.crt",
-        "TlsKeyFile": "/opt/logrange/lr/config/tls/client.key",
-        "TlsCAFile": "/opt/logrange/lr/config/tls/ca.pem"
+        "TlsEnabled": true,
+        "TlsCertFile": "/var/state/logrange-collector.cert",
+        "TlsKeyFile": "/var/state/logrange-collector.key",
+        "TlsCAFile": "/var/state/root.cert"
       },
       "Storage": {
         "Type": "file",
@@ -101,6 +100,8 @@ spec:
               mountPath: /var/lib/logrange
             - name: varlog
               mountPath: /var/log
+            - name: varstate
+              mountPath: /var/state
       volumes:
         - name: config
           configMap:
@@ -118,3 +119,6 @@ spec:
         - name: varlog
           hostPath:
             path: /var/log
+        - name: varstate
+          hostPath:
+            path: /var/state
