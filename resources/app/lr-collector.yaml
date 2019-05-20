@@ -1,0 +1,124 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lr-collector
+  namespace: kube-system
+  labels:
+    app: lr-collector
+data:
+  collect.json: |
+    {
+      "Collector": {
+        "IncludePaths": [
+          "/var/log/containers/*.log",
+          "/var/log/containers/*/*.log",
+          "/var/lib/gravity/site/*/*.log"
+        ],
+        "ExcludeMatchers": [],
+        "SyncWorkersIntervalSec": 20,
+        "StateStoreIntervalSec": 20,
+        "EventMaxRecords": 1000,
+        "RecordMaxSizeBytes": 16384,
+        "Schemas": [
+          {
+            "PathMatcher": "/*(?:.+/)*(?P<pod>.+)_(?P<ns>.+)_(?P<cname>.+)-(?P<cid>.+)\\..+",
+            "DataFormat": "k8json",
+            "Meta": {
+              "Tags": {
+                "pod": "{pod}",
+                "ns": "{ns}",
+                "cname": "{cname}",
+                "cid": "{cid}"
+              }
+            }
+          },
+          {
+            "PathMatcher": "/var/lib/gravity/site/*(?:.+/)*(?P<file>.+\\.log)",
+            "DataFormat": "text",
+            "DateFormats": [
+              "DDD MMM DD HH:mm:ss ZZZ"
+            ],
+            "Meta": {
+              "Tags": {
+                "file": "{file}"
+              }
+            }
+          }
+        ]
+      },
+      "Transport": {
+        "ListenAddr": "lr-aggregator.kube-system.svc.cluster.local:9966",
+        "TlsEnabled": true,
+        "TlsCertFile": "/var/state/logrange-collector.cert",
+        "TlsKeyFile": "/var/state/logrange-collector.key",
+        "TlsCAFile": "/var/state/root.cert"
+      },
+      "Storage": {
+        "Type": "file",
+        "Location": "/var/lib/gravity/logrange/lr/storage/"
+      }
+    }
+
+  log4g.properties: |
+    # log4g configuration
+
+---
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: lr-collector
+  namespace: kube-system
+  labels:
+    app: lr-collector
+spec:
+  selector:
+    matchLabels:
+      app: lr-collector
+  template:
+    metadata:
+      labels:
+        app: lr-collector
+      annotations:
+        seccomp.security.alpha.kubernetes.io/pod: docker/default
+
+    spec:
+      securityContext:
+        runAsUser: 0
+      containers:
+        - name: lr-collector
+          image: "index.docker.io/logrange/collector:v0.0.4"
+          imagePullPolicy: Always
+          volumeMounts:
+            - name: config
+              mountPath: /opt/logrange/lr/config
+            - name: extdockercontainers
+              mountPath: /ext/docker/containers
+            - name: varlibgravitysite
+              mountPath: /var/lib/gravity/site
+            - name: varlibgravitylogrange
+              mountPath: /var/lib/gravity/logrange
+            - name: varlog
+              mountPath: /var/log
+            - name: varstate
+              mountPath: /var/state
+      volumes:
+        - name: config
+          configMap:
+            name: lr-collector
+        - name: extdockercontainers
+          hostPath:
+            path: /ext/docker/containers
+        - name: varlibgravitysite
+          hostPath:
+            path: /var/lib/gravity/site
+        - name: varlibgravitylogrange
+          hostPath:
+            path: /var/lib/gravity/logrange
+            type: DirectoryOrCreate
+        - name: varlog
+          hostPath:
+            path: /var/log
+        - name: varstate
+          hostPath:
+            path: /var/state

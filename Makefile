@@ -1,14 +1,11 @@
-export VERSION ?= $(shell git describe --tags)
+export VERSION ?= $(shell git describe --abbrev=0 --tags)
 REPOSITORY := gravitational.io
 NAME := logging-app
 OPS_URL ?= https://opscenter.localhost.localdomain:33009
 OUT ?= $(NAME).tar.gz
 GRAVITY ?= gravity
 UPDATE_IMAGE_OPTS := \
-	--set-image=log-collector:$(VERSION) \
-	--set-image=log-forwarder:$(VERSION) \
-	--set-image=log-tailer:$(VERSION) \
-	--set-image=log-linker:$(VERSION) \
+	--set-image=log-adapter:$(VERSION) \
 	--set-image=log-hook:$(VERSION)
 UPDATE_METADATA_OPTS := --repository=$(REPOSITORY) --name=$(NAME) --version=$(VERSION)
 
@@ -16,13 +13,9 @@ UPDATE_METADATA_OPTS := --repository=$(REPOSITORY) --name=$(NAME) --version=$(VE
 package:
 	$(MAKE) -C images all
 
-.PHONY: forwarder
-forwarder:
-	$(MAKE) -C images forwarder
-
-.PHONY: collector
+.PHONY: adapter
 collector:
-	$(MAKE) -C images collector
+	$(MAKE) -C images adapter
 
 .PHONY: hook
 hook:

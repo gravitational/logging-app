@@ -1,87 +1,57 @@
-# Telekube Logging
 
-This gravity app provides an rsyslog-based log collection system to gravity sites.
+# Gravity Log Application
 
-## Overview
+Gravity Log Application is intended for gathering logs and providing API for logs retrieval in Gravity cluster. The application is based on [Logrange](https://github.com/logrange/logrange) streaming database.
 
-There are 2 main components in the logging system: collectors and forwarders.
+### 1. HTTP API
 
-### Forwarder
+The server listens on port 8083 by default.
 
-The forwarder's role is to read files on disk on each k8s node and forward them
-to a central place. We use [remote_syslog2](https://github.com/papertrail/remote_syslog2)
-to accomplish this, with the following [config](images/forwarder/remote_syslog.yml).
-The forwarder is implemented as a `DaemonSet`.
+#### Querying Logs
 
-The gist of the forwarders config is to tail all files that from `/var/log/gravity`
-and `/var/log/containers`. Both these paths are mounted from the host the forwarder
-is running on. Kubernetes logs are automatically included via `/var/log/containers`.
+###### GET: /v1/log?limit=&query=
 
-To have your applications logs forwarded from file, you must mount and log to
-`/var/log/gravity`.
+- `query` can contain the following terms:<br/>
+   * `pod`:<name> - to limit search to a specific pod<br/>
+   * `container`:<name> - to limit search to a specific container inside a pod<br/>
+   * `file`:<file> - to limit search to a specific log file<br/>
+   * boolean operators `and` and `or`
 
-### Collector
+  **Example**:<br/>
+  `/v1/log?limit=1&query=pod:p1 and container:"c1" and file:f1 or file:f2`
+  
+- `query` param could be used to search for literal text occurrence:
+  
+  **Example**:<br/>
+  `/v1/log?limit=100&query="some text"`
 
-The collector's role is to collect all incoming logs via an rsyslog server accepting
-both TCP and UDP. The forwarder automatically sends all logs to the service provided
-by the collector.
+- default `limit` is 1000
 
-To have your application logs directly sent to rsyslog, you must log via rsyslog
-TCP/UDP to `log-collector.kube-system.svc.cluster.local`.
+- output format: JSON, e.g.: `[{"type":"data","payload":""}]`
 
-Logs are currently written to `/var/log/messages` on the host node.
+#### Download logs
 
-Another facet of the collector container is a simple logging configuration and tailing service.
-The service exposes the following endpoints:
-  - /ws         - websocket endpoint that streams logs to the client
-  - /forwarders - HTTP endpoint for managing log forwarders
+###### GET: /v1/download
 
-The websocket streaming endpoint has a very simple protocol: the first message from the client upon
-connection is a free-form filter query to choose which logs to stream. After that the client is only
-receiving the frames with actual log messages until it chooses to close the connection. It is important
-for the client to properly terminate the connection as tailing service depends on the close event to 
-release resources used for this service.
+- output format: compressed tarball stream (`tar.gz`)
 
-Implemented query syntax supports filtering on `containers`, `pods` and `file` names:
+### 2. Recurring jobs
+
+The application has a set of recurring jobs which run as a part of the application binary and perform tasks described below.
+
+#### Config synchronizer
+
+Job that syncs the updates to Gravity log forwarder configuration to internal format. Frequency can be configured (see `SyncIntervalSec` param of the config) and is set to 20 seconds by default.
+
+#### Queries executor
+
+Job that runs scheduled queries. Queries can be configured (see `CronQueries` section of the config), by default there is a single query configured which is used to keep the database size within limits by periodically trimming older entries.
+
+### 3. Build instructions
 
 ```
-container:mycontainer and pod:my-app-pod-1fbc6 and file:demo.log
-```
-If the query is ill-formed or does not contain any sub-filters (i.e. arbitrary search query) - it is used verbatim.
-
-The log forwarder management endpoint handles a PUT request with a JSON-encoded list of external forwarders
-to configure:
-```shell
-$ curl -H "Content-Type: application/json" -X PUT -d '[{"address":"my.example.com:514","protocol":"tcp"},{"address":"your.example.com:514", "protocol":"udp"}]' http://localhost:8083/v1/forwarders
-```
-
-## Additional configuration
-
-The collector mounts a `ConfigMap` named `extra-log-collector-config`. You can
-write your own rsyslog configuration there to be included in the collector. This
-enables you to further forward logs out of the system, to anything that speaks
-incoming rsyslog.
-
-## Building
-
-Requirements:
-
-* docker
-* existing gravity account
-
-To make a gravity package simply type:
-
-```shell
-make
-```
-
-## Production
-
-This app is automatically included with any `k8s-*` app and anything inheriting from it.
-
-## Future work
-
- - [ ] We pass along structured logging information transparently currently, but could do more with it.
- - [ ] Rsyslog is a pretty cranky protocol, we probably want to get rid of it eventually.
- - [ ] Consider replacing the collector with ES/Graylog, for something more indexable/searchable/extensible.
-
+ $ git clone git@github.com:gravitational/logging-app.git
+ $ cd logging-app
+ $ make clean tarball
+ ```
+ Prefix the `make` command with `OPS_URL=ops-url` to work with a remote package repository and `VERSION=x.y.z` to build a specific version.

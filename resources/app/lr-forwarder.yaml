@@ -1,0 +1,99 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lr-forwarder
+  namespace: kube-system
+  labels:
+    app: lr-forwarder
+data:
+  forward.json: |
+    {
+      "Forwarder": {
+        "Workers": [],
+        "StateStoreIntervalSec": 20,
+        "SyncWorkersIntervalSec": 5
+      },
+
+      "Transport": {
+        "ListenAddr": "lr-aggregator.kube-system.svc.cluster.local:9966",
+        "TlsEnabled": true,
+        "TlsCertFile": "/var/state/logrange-forwarder.cert",
+        "TlsKeyFile": "/var/state/logrange-forwarder.key",
+        "TlsCAFile": "/var/state/root.cert"
+      },
+
+      "Storage": {
+        "Type": "file",
+        "Location": "/var/lib/gravity/logrange/lr/storage/"
+      }
+    }
+
+  log4g.properties: |
+    # log4g configuration
+
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: lr-forwarder
+  namespace: kube-system
+  labels:
+    app: lr-forwarder
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lr-forwarder
+  template:
+    metadata:
+      labels:
+        app: lr-forwarder
+      annotations:
+        seccomp.security.alpha.kubernetes.io/pod: docker/default
+
+    spec:
+      securityContext:
+        runAsUser: 0
+      nodeSelector:
+        gravitational.io/k8s-role: master
+      containers:
+        - name: lr-forwarder
+          image: "index.docker.io/logrange/forwarder:v0.0.4"
+          imagePullPolicy: Always
+          volumeMounts:
+            - name: config
+              mountPath: /opt/logrange/lr/config
+            - name: extdockercontainers
+              mountPath: /ext/docker/containers
+            - name: varlibgravitylogrange
+              mountPath: /var/lib/gravity/logrange
+            - name: varlog
+              mountPath: /var/log
+            - name: varstate
+              mountPath: /var/state
+      volumes:
+        - name: config
+          configMap:
+            name: lr-forwarder
+        - name: extdockercontainers
+          hostPath:
+            path: /ext/docker/containers
+        - name: varlibgravitylogrange
+          hostPath:
+            path: /var/lib/gravity/logrange
+            type: DirectoryOrCreate
+        - name: varlog
+          hostPath:
+            path: /var/log
+        - name: varstate
+          hostPath:
+            path: /var/state
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - preference:
+                matchExpressions:
+                  - key: logrange.io/node
+                    operator: Exists
+              weight: 100
