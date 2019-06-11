@@ -59,7 +59,7 @@ spec:
         gravitational.io/k8s-role: master
       containers:
         - name: lr-forwarder
-          image: "index.docker.io/logrange/forwarder:v0.0.4"
+          image: "index.docker.io/logrange/forwarder:v0.1.1"
           imagePullPolicy: Always
           volumeMounts:
             - name: config
