@@ -51,7 +51,8 @@ data:
       "PipesConfig": {
         "EnsureAtStart": [
           {
-            "Name": "__default__"
+            "Name": "__default__",
+            "TagsCond": "cname!=lr-aggregator"
           }
         ]
       }
@@ -87,7 +88,7 @@ spec:
         gravitational.io/k8s-role: master
       containers:
         - name: lr-aggregator
-          image: "index.docker.io/logrange/logrange:v0.0.4"
+          image: "index.docker.io/logrange/logrange:v0.1.1"
           imagePullPolicy: Always
           ports:
             - name: rpc
