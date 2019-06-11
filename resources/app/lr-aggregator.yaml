@@ -51,7 +51,8 @@ data:
       "PipesConfig": {
         "EnsureAtStart": [
           {
-            "Name": "__default__"
+            "Name": "__default__",
+            "TagsCond": "cname!=lr-aggregator"
           }
         ]
       }
