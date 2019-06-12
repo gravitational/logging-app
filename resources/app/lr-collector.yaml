@@ -87,7 +87,7 @@ spec:
         runAsUser: 0
       containers:
         - name: lr-collector
-          image: "index.docker.io/logrange/collector:v0.0.4"
+          image: "index.docker.io/logrange/collector:v0.1.1"
           imagePullPolicy: Always
           volumeMounts:
             - name: config
