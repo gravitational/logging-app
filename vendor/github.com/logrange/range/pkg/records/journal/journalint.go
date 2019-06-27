@@ -17,10 +17,8 @@ package journal
 import (
 	"context"
 	"fmt"
-	"github.com/logrange/range/pkg/records"
-	"sort"
-
 	"github.com/jrivets/log4g"
+	"github.com/logrange/range/pkg/records"
 	"github.com/logrange/range/pkg/records/chunk"
 	"github.com/logrange/range/pkg/utils/errors"
 )
@@ -46,7 +44,7 @@ func (j *journal) Name() string {
 	return j.cc.JournalName()
 }
 
-// Write - writes records received from the iterator to the journal. The Write can write only a portion from
+// Write - writes records received from the JIterator to the journal. The Write can write only a portion from
 // the it. It can happen when max chunk size is hit.
 func (j *journal) Write(ctx context.Context, rit records.Iterator) (int, Pos, error) {
 	var err error
@@ -70,6 +68,7 @@ func (j *journal) Write(ctx context.Context, rit records.Iterator) (int, Pos, er
 		if err != errors.MaxSizeReached {
 			break
 		}
+		c.Sync()
 
 		if c.Id() == excludeCid {
 			j.logger.Error("Ooops, same chunk id=", excludeCid, " was returned twice. Stopping the Write operation with the err=", err)
@@ -87,10 +86,6 @@ func (j *journal) Sync() {
 	if c != nil {
 		c.Sync()
 	}
-}
-
-func (j *journal) Iterator() Iterator {
-	return &iterator{j: j}
 }
 
 func (j *journal) Size() uint64 {
@@ -113,32 +108,6 @@ func (j *journal) Count() uint64 {
 
 func (j *journal) String() string {
 	return fmt.Sprintf("{name=%s}", j.cc.JournalName())
-}
-
-func (j *journal) getChunkByIdOrGreater(cid chunk.Id) chunk.Chunk {
-	chunks, _ := j.cc.Chunks(context.Background())
-	n := len(chunks)
-	if n == 0 {
-		return nil
-	}
-
-	idx := sort.Search(n, func(i int) bool { return chunks[i].Id() >= cid })
-	// according to the condition idx is always in [0..n]
-	if idx < n {
-		return chunks[idx]
-	}
-	return chunks[n-1]
-}
-
-func (j *journal) getChunkByIdOrLess(cid chunk.Id) chunk.Chunk {
-	chunks, _ := j.cc.Chunks(context.Background())
-	n := len(chunks)
-	if n == 0 || chunks[0].Id() > cid {
-		return nil
-	}
-
-	idx := sort.Search(n, func(i int) bool { return chunks[i].Id() > cid })
-	return chunks[idx-1]
 }
 
 // Chunks please see journal.Journal interface

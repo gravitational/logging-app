@@ -23,6 +23,7 @@ import (
 	"github.com/logrange/logrange/pkg/model"
 	"github.com/logrange/logrange/pkg/model/tag"
 	"github.com/logrange/logrange/pkg/tindex"
+	"github.com/logrange/logrange/pkg/tmindex"
 	"github.com/logrange/range/pkg/records/chunk"
 	"github.com/logrange/range/pkg/records/chunk/chunkfs"
 	"github.com/logrange/range/pkg/records/journal"
@@ -37,15 +38,15 @@ import (
 type (
 	// Service struct provides functionality and some functions to work with partitions(LogEvent journals)
 	Service struct {
-		Pool     *bytes.Pool        `inject:""`
-		Journals journal.Controller `inject:""`
-		TIndex   tindex.Service     `inject:""`
-		CIdxDir  string             `inject:"cindexDir"`
-		MainCtx  context.Context    `inject:"mainCtx"`
+		Pool      *bytes.Pool        `inject:""`
+		Journals  journal.Controller `inject:""`
+		TIndex    tindex.Service     `inject:""`
+		MainCtx   context.Context    `inject:"mainCtx"`
+		TsIndexer tmindex.TsIndexer  `inject:""`
 
-		cIdx   *cindex
 		logger log4g.Logger
 		weCh   chan WriteEvent
+		tmir   *tmirebuilder
 	}
 
 	// TruncateParams allows to provide parameters for Truncate() functions
@@ -60,7 +61,7 @@ type (
 		MinSrcSize uint64
 		// OldestTs defines the oldest record timestamp. Chunks with records less than the parameter are candidates
 		// for truncation
-		OldestTs uint64
+		OldestTs int64
 		// Max Global size
 		MaxDBSize uint64
 	}
@@ -68,7 +69,7 @@ type (
 	// TruncateInfo describes a truncated partition information
 	TruncateInfo struct {
 		// LatestTs contains timestamp for latest record in the partition
-		LatestTs      uint64
+		LatestTs      int64
 		Tags          tag.Set
 		Src           string
 		BeforeSize    uint64
@@ -125,30 +126,32 @@ type (
 		// Records contains number of records in the chunk
 		Records uint32
 		// MinTs contains minimal timestamp value for the chunk records
-		MinTs uint64
+		MinTs int64
 		// MaxTs contains maximal timestamp value for the chunk records
-		MaxTs uint64
+		MaxTs int64
+		// Comment any supplemental info
+		Comment string
 	}
 )
 
 // NewService creates new service for controlling partitions
 func NewService() *Service {
 	s := new(Service)
-	s.cIdx = newCIndex()
 	s.logger = log4g.GetLogger("logrange.partition.Service")
 	s.weCh = make(chan WriteEvent, 100)
 	return s
 }
 
+// Init is part of linker.Initializer
 func (s *Service) Init(ctx context.Context) error {
-	s.logger.Info("Initializing")
-	s.cIdx.init(s.CIdxDir)
+	s.tmir = newTmirebuilder(s, 10)
+	go s.cleanupTsIndex(15*time.Second, time.Minute)
 	return nil
 }
 
+// Shutdown is part of linker.Shutdowner
 func (s *Service) Shutdown() {
-	s.logger.Info("Shutdown()")
-	s.cIdx.saveDataToFile()
+	s.tmir.close()
 }
 
 // Write performs Write operation to a partition defined by tags.
@@ -209,12 +212,7 @@ func (s *Service) Write(ctx context.Context, tags string, lit model.Iterator, no
 
 // GetJournals is part of cursor.JournalsProvider
 func (s *Service) GetJournals(ctx context.Context, tagsCond *lql.Source, maxLimit int) (map[tag.Line]journal.Journal, error) {
-	var res map[tag.Line]journal.Journal
-	if maxLimit < 100 {
-		res = make(map[tag.Line]journal.Journal)
-	} else {
-		res = make(map[tag.Line]journal.Journal)
-	}
+	res := make(map[tag.Line]journal.Journal)
 
 	var err1 error
 	err := s.TIndex.Visit(tagsCond, func(tags tag.Set, jrnl string) bool {
@@ -225,13 +223,12 @@ func (s *Service) GetJournals(ctx context.Context, tagsCond *lql.Source, maxLimi
 			return false
 		}
 
+		// keep the journal in result map
+		res[tags.Line()] = j
 		if len(res) == maxLimit {
-			s.TIndex.Release(jrnl)
 			err1 = errors.Errorf("Limit exceeds. Expected no more than %d journals, but at least %d alredy found ", maxLimit, maxLimit+1)
 			return false
 		}
-
-		res[tags.Line()] = j
 
 		return true
 	}, tindex.VF_DO_NOT_RELEASE)
@@ -249,9 +246,36 @@ func (s *Service) GetJournals(ctx context.Context, tagsCond *lql.Source, maxLimi
 	return res, err
 }
 
+// GetJournal acquires the journal by its journal Id (jn) or retruns an error if it is not possbile,
+// If no errors returned, the journal must be released by Release() function after usage
+func (s *Service) GetJournal(ctx context.Context, jn string) (tag.Set, journal.Journal, error) {
+	ts, err := s.TIndex.GetJournalTags(jn, true)
+	if err != nil {
+		return ts, nil, errors.Wrapf(err, "GetJournal(): could not retrieve tags by s.TIndex.GetJournalTags()")
+	}
+
+	j, err := s.Journals.GetOrCreate(ctx, jn)
+	if err != nil {
+		s.TIndex.Release(jn)
+		return ts, nil, errors.Wrapf(err, "GetJournal(): could not create journals s.Journals.GetOrCreate()")
+	}
+
+	return ts, j, nil
+}
+
 // Release releases the partition. Journal must not be used after the call. This is part of cursor.JournalsProvider
 func (s *Service) Release(jn string) {
 	s.TIndex.Release(jn)
+}
+
+// GetIsIndexer returns TsIndexer object
+func (s *Service) GetTsIndexer() tmindex.TsIndexer {
+	return s.TsIndexer
+}
+
+// TmIndexRebuilder returns the time index rebuilder
+func (s *Service) GetTmIndexRebuilder() TmIndexRebuilder {
+	return s.tmir
 }
 
 // Partitions function returns list of partitions with tags, that match to tagsCond with the specific offset and limit in the result
@@ -344,11 +368,12 @@ func (s *Service) GetParitionInfo(tags string) (PartitionInfo, error) {
 		return PartitionInfo{}, err
 	}
 
-	sc := s.cIdx.syncChunks(s.MainCtx, jrnl.Name(), cks)
+	sc := s.TsIndexer.SyncChunks(s.MainCtx, jrnl.Name(), cks)
 	var res PartitionInfo
 	res.Chunks = make([]*ChunkInfo, len(sc))
 	sz := uint64(0)
 	tr := uint64(0)
+
 	for i, c := range sc {
 		ci := new(ChunkInfo)
 		ci.Id = c.Id
@@ -356,6 +381,15 @@ func (s *Service) GetParitionInfo(tags string) (PartitionInfo, error) {
 		ci.MinTs = c.MinTs
 		ci.Records = cks[i].Count()
 		ci.Size = cks[i].Size()
+
+		cnt, err := s.TsIndexer.Count(src, c.Id)
+		if err != nil {
+			s.tmir.RebuildIndex(src, c.Id, true)
+			ci.Comment = "Time index was corrupted or did not exist. Rebuilding..."
+		} else {
+			ci.Comment = fmt.Sprintf("Found %d intervals in the time index", cnt)
+		}
+
 		sz += uint64(ci.Size)
 		tr += uint64(ci.Records)
 		res.Chunks[i] = ci
@@ -421,9 +455,9 @@ func (s *Service) Truncate(ctx context.Context, tp TruncateParams, otf OnTruncat
 		}
 
 		if err == nil {
-			lci := s.cIdx.getLastChunkInfo(jn)
-			lts := uint64(0)
-			if lci != nil {
+			lci, err := s.TsIndexer.LastChunkRecordsInfo(jn)
+			lts := int64(0)
+			if err == nil {
 				lts = lci.MaxTs
 			}
 			ti := &TruncateInfo{lts, tags, jn, size, size - tr, recs, arecs, n, deleted}
@@ -496,7 +530,7 @@ func (s *Service) truncateGlobally(ctx context.Context, sortedInfos []*TruncateI
 	for i := 0; i < len(sortedInfos) && ts > tp.MaxDBSize; i++ {
 		ti := sortedInfos[i]
 		if ti.AfterSize > 0 {
-			_, err := s.TIndex.GetJournalTags(ti.Src)
+			_, err := s.TIndex.GetJournalTags(ti.Src, true)
 			if err != nil {
 				s.logger.Warn("Could not acquire journal ", ti.Src, " for deletion err=", err)
 				continue
@@ -565,7 +599,7 @@ func (s *Service) truncate(ctx context.Context, jrnl journal.Journal, tp *Trunca
 	s.logger.Debug("After checking size first ", idx, " chunks considered to be removed. New size=", size)
 
 	if tp.OldestTs > 0 && idx < len(cks) {
-		sc := s.cIdx.syncChunks(ctx, jrnl.Name(), cks)
+		sc := s.TsIndexer.SyncChunks(ctx, jrnl.Name(), cks)
 		for ; idx < len(sc) && sc[idx].MaxTs <= tp.OldestTs && size-uint64(cks[idx].Size()) >= tp.MinSrcSize; idx++ {
 			size -= uint64(cks[idx].Size())
 		}
@@ -634,8 +668,53 @@ func (s *Service) deleteChunk(cfname string) {
 }
 
 func (s *Service) onWriteCIndex(src string, iw *iwrapper, n int, pos journal.Pos) {
-	ci := chkInfo{pos.CId, iw.minTs, iw.maxTs}
-	s.cIdx.onWrite(src, pos.Idx-uint32(n), pos.Idx-1, ci)
+	ri := tmindex.RecordsInfo{pos.CId, iw.minTs, iw.maxTs}
+	err := s.TsIndexer.OnWrite(src, pos.Idx-uint32(n), pos.Idx-1, ri)
+	if err == tmindex.ErrTmIndexCorrupted {
+		// if no time-index kick the rebuilder to make it
+		s.tmir.RebuildIndex(src, ri.Id, false)
+	}
+}
+
+func (s *Service) cleanupTsIndex(startTo, to time.Duration) {
+	s.logger.Info("Entering cleanupTsIndex(). startTo=", startTo, ", to=", to)
+	defer s.logger.Info("Leaving cleanupTsIndex() ")
+
+	select {
+	case <-s.MainCtx.Done():
+		return
+	case <-time.After(startTo):
+	}
+
+	for {
+		s.TsIndexer.VisitSources(func(src string) bool {
+			_, err := s.TIndex.GetJournalTags(src, true)
+			cks := chunk.Chunks{}
+			if err == nil {
+				defer s.TIndex.Release(src)
+				jrnl, err := s.Journals.GetOrCreate(s.MainCtx, src)
+				if err == nil {
+					cks, err = jrnl.Chunks().Chunks(s.MainCtx)
+					if err != nil {
+						s.logger.Warn("cleanupTsIndex(): could not get chunks for src=", src, " err=", err)
+					}
+				} else {
+					s.logger.Warn("cleanupTsIndex(): could not get or create journal for src=", src, " removing all indexes err=", err)
+				}
+			} else {
+				s.logger.Debug("cleanupTsIndex(): got an error for src=", src, " removing all indexes err=", err)
+			}
+
+			s.TsIndexer.SyncChunks(s.MainCtx, src, cks)
+			return s.MainCtx.Err() == nil
+		})
+
+		select {
+		case <-s.MainCtx.Done():
+			return
+		case <-time.After(to):
+		}
+	}
 }
 
 func (tp TruncateParams) String() string {

@@ -30,6 +30,7 @@ func (w *Writer) Init(initSz int, p *Pool) {
 	w.pos = 0
 	if p != nil {
 		w.buf = w.pool.Arrange(initSz)
+		w.buf = w.buf[:cap(w.buf)]
 	} else {
 		w.buf = make([]byte, initSz)
 	}
@@ -78,15 +79,16 @@ func (w *Writer) Close() error {
 }
 
 func (w *Writer) grow(n int) {
-	av := cap(w.buf) - w.pos
+	av := len(w.buf) - w.pos
 	if av < n {
-		nbs := int(2*cap(w.buf) + n)
+		nbs := int(2*len(w.buf) + n)
 		if cap(w.buf) == 0 {
 			nbs = 60 + 2*n
 		}
 		var nb []byte
 		if w.pool != nil {
 			nb = w.pool.Arrange(nbs)
+			nb = nb[:cap(nb)]
 		} else {
 			nb = make([]byte, nbs)
 		}

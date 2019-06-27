@@ -27,6 +27,7 @@ import (
 	errors2 "github.com/pkg/errors"
 	"sort"
 	"sync"
+	"time"
 )
 
 type (
@@ -117,6 +118,7 @@ func (s *Service) Init(ctx context.Context) error {
 	s.logger.Info(len(ppipes), " pipe(s) were created.")
 
 	go s.notificatior()
+	go s.pipesCleaner(time.Minute, 10*time.Minute)
 
 	err = s.ensurePipesAtStart()
 	if err != nil {
@@ -136,25 +138,11 @@ func (s *Service) Shutdown() {
 	s.logger.Info("Shutdown(): done with all workers")
 }
 
-// EnsurePipe checks whether the pipe exists and it creates the new one if it does not.
+// EnsurePipe checks whether the pipe exists. It will create the new one if it does not exist.
 // The function will return an error if there is a pipe with the name provided, but
-// its conditions are different than in st
+// with another settings, than p
 func (s *Service) EnsurePipe(p Pipe) (PipeDesc, error) {
-	for i := 0; i < 2; i++ {
-		p1, err := s.GetPipe(p.Name)
-		if err == nil {
-			if p1.FltCond != p.FltCond || p1.TagsCond != p.TagsCond {
-				return PipeDesc{}, errors2.Errorf("found pipe %s with the same name but different condidions. Requested was %s", p1, p)
-			}
-			return p1, nil
-		}
-		_, err = s.CreatePipe(p)
-		if err != nil {
-			s.logger.Warn("EnsurePipe() p=", p, " create Pipe returned err=", err)
-		}
-	}
-	s.logger.Error("Oops, we either could not get or create the pipe, bug? p=", p)
-	return PipeDesc{}, errors2.Errorf("Could not either create and get pipe for %s, seems like corrupted data", p)
+	return s.ensurePipe(p, false)
 }
 
 // CreatePipe creates new pipe by name and conditions provided. Returns an error
@@ -238,6 +226,34 @@ func (s *Service) GetPipes() []Pipe {
 	return res
 }
 
+// ensurePipe checks whether the pipe p already exists or it creates the new one
+// if it does not. If the pipe exists and changeOk==true, the pipe could be re-created
+// according to settings of the p, if they are different than the existing pipe. If
+// the changeOk==false and the pipe exists and the settings are different, an error
+// will be returned.
+func (s *Service) ensurePipe(p Pipe, changeOk bool) (PipeDesc, error) {
+	for i := 0; i < 3; i++ {
+		p1, err := s.GetPipe(p.Name)
+		if err == nil {
+			if p1.FltCond != p.FltCond || p1.TagsCond != p.TagsCond {
+				if changeOk {
+					s.logger.Warn("ensurePipe(): the pipe with name ", p.Name, " already exists, but it has another settings p1=", p1, ", p=", p, ". Will delete p1 and try to create with settings of p")
+					s.DeletePipe(p.Name)
+					continue
+				}
+				return PipeDesc{}, errors2.Errorf("found pipe %s with the same name but different conditions. Requested was %s", p1, p)
+			}
+			return p1, nil
+		}
+		_, err = s.CreatePipe(p)
+		if err != nil {
+			s.logger.Warn("EnsurePipe() p=", p, " create Pipe returned err=", err)
+		}
+	}
+	s.logger.Error("Oops, we either could not get or create the pipe, bug? p=", p)
+	return PipeDesc{}, errors2.Errorf("Could not either create and get pipe for %s, seems like corrupted data", p)
+}
+
 func (s *Service) savePipes() {
 	s.logger.Info("Saving information about ", len(s.ppipes), " pipes")
 	s.lock.Lock()
@@ -269,7 +285,38 @@ func (s *Service) notificatior() {
 	}
 }
 
-// getPipesForSource returns list of streams affected by the provided sours. The
+// pipesCleaner must be run in a dedicated go-routine to schedule cleaning jobs for every pipe known.
+func (s *Service) pipesCleaner(startTo, to time.Duration) {
+	s.logger.Info("Entering pipesCleaner(). startTo=", startTo, ", to=", to)
+	defer s.logger.Info("Leaving pipesCleaner() ")
+
+	select {
+	case <-s.closedCh:
+		return
+	case <-time.After(startTo):
+	}
+
+	for {
+		s.lock.Lock()
+		pp := make([]*ppipe, 0, len(s.ppipes))
+		for _, p := range s.ppipes {
+			pp = append(pp, p)
+		}
+		s.lock.Unlock()
+
+		for _, p := range pp {
+			p.cleanPartitions()
+		}
+
+		select {
+		case <-s.closedCh:
+			return
+		case <-time.After(to):
+		}
+	}
+}
+
+// getPipesForSource returns list of streams affected by the provided sources. The
 // function uses internal cache weCache for fast returning list of streams that correspond
 // to the src. If cache is not filled, it will check all partitions against the tags provided and full-fill the cache
 func (s *Service) getPipesForSource(we *journal2.WriteEvent) []*ppipe {
@@ -302,7 +349,7 @@ func (s *Service) getPipesForSource(we *journal2.WriteEvent) []*ppipe {
 func (s *Service) ensurePipesAtStart() error {
 	s.logger.Info("ensurePipesAtStart(): ", s.Config.EnsureAtStart)
 	for _, p := range s.Config.EnsureAtStart {
-		_, err := s.EnsurePipe(p)
+		_, err := s.ensurePipe(p, true)
 		if err != nil {
 			s.logger.Error("ensurePipesAtStart(): error with pipe=", p, ", err=", err)
 			return err

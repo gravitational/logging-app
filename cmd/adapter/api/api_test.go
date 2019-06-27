@@ -28,8 +28,8 @@ import (
 )
 
 func Test_writeEvents(t *testing.T) {
-	evs := []*api.LogEvent{{Timestamp: uint64(time.Date(2019, time.January, 1, 1,
-		1, 1, 1, time.UTC).UnixNano()),
+	evs := []*api.LogEvent{{Timestamp: time.Date(2019, time.January, 1, 1,
+		1, 1, 1, time.UTC).UnixNano(),
 		Message: "hello\n",
 		Fields:  "f1=v1,f2=v2,f3=v3",
 	}}

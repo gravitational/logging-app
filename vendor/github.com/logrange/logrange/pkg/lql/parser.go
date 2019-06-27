@@ -27,7 +27,7 @@ import (
 
 var (
 	lqlLexer = lexer.Must(getRegexpDefinition(`(\s+)` +
-		`|(?P<Keyword>(?i)SELECT|DESCRIBE|TRUNCATE|DELETE|DRYRUN|BEFORE|MAXSIZE|MINSIZE|MAXDBSIZE|FROM|WHERE|PARTITIONS|PARTITION|PIPES|SHOW|CREATE|PIPE|POSITION|LIMIT|OFFSET|AND|OR|LIKE|CONTAINS|PREFIX|SUFFIX|NOT)` +
+		`|(?P<Keyword>(?i)SELECT|DESCRIBE|TRUNCATE|DELETE|DRYRUN|BEFORE|MAXSIZE|MINSIZE|MAXDBSIZE|FROM|RANGE|WHERE|PARTITIONS|PARTITION|PIPES|SHOW|CREATE|PIPE|POSITION|LIMIT|OFFSET|AND|OR|LIKE|CONTAINS|PREFIX|SUFFIX|NOT|\[|\]|\:)` +
 		`|(?P<Ident>[a-zA-Z_][a-z\./\-A-Z0-9_:]*)` +
 		`|(?P<String>"([^\\"]|\\.)*"|'[^']*')` +
 		`|(?P<Operator><>|!=|<=|>=|[-+*/%,.=<>()])` +
@@ -100,6 +100,7 @@ type (
 	Select struct {
 		Format   *string     `(@String)?`
 		Source   *Source     `("FROM" @@)?`
+		Range    *Range      `("RANGE" @@)?`
 		Where    *Expression `("WHERE" @@)?`
 		Position *Position   `("POSITION" @@)?`
 		Offset   *int64      `("OFFSET" @Number)?`
@@ -121,7 +122,7 @@ type (
 		Source    *Source   `(@@)?`
 		MinSize   *Size     `("MINSIZE" @Number)?`
 		MaxSize   *Size     `("MAXSIZE" @Number)?`
-		Before    *DateTime `("BEFORE" (@String|@Number))?`
+		Before    *DateTime `("BEFORE" @String)?`
 		MaxDbSize *Size     `("MAXDBSIZE" @Number)?`
 	}
 
@@ -153,13 +154,23 @@ type (
 	}
 
 	Condition struct {
-		Operand string `  (@Ident|@Keyword)`
-		Op      string ` (@("<"|">"|">="|"<="|"!="|"="|"CONTAINS"|"PREFIX"|"SUFFIX"|"LIKE"))`
-		Value   string ` (@String|@Ident|@Number)`
+		Ident *Identifier `  @@`
+		Op    string      ` (@("<"|">"|">="|"<="|"!="|"="|"CONTAINS"|"PREFIX"|"SUFFIX"|"LIKE"))`
+		Value string      ` (@String|@Ident|@Number)`
+	}
+
+	Identifier struct {
+		Operand string        `  (@Ident|@Keyword)`
+		Params  []*Identifier ` ("("@@ {"," @@} ")")?`
 	}
 
 	Position struct {
 		PosId string `(@"TAIL"|@"HEAD"|@String|@Ident)`
+	}
+
+	Range struct {
+		TmPoint1 *DateTime `("[")? (@String)?`
+		TmPoint2 *DateTime `(":" @String "]")?`
 	}
 
 	Partitions struct {
@@ -183,7 +194,7 @@ type (
 	}
 
 	Size     uint64
-	DateTime uint64
+	DateTime int64
 )
 
 func (sz *Size) Capture(values []string) error {
@@ -213,9 +224,9 @@ func (tv *TagsVal) makeString(sb *strings.Builder) {
 }
 
 func (dt *DateTime) Capture(values []string) error {
-	tm, err := parseTime(values[0])
+	tm, err := parseLqlDateTime(values[0])
 	if err == nil {
-		*dt = DateTime(tm)
+		*dt = DateTime(tm.UnixNano())
 	}
 	return err
 }
@@ -285,14 +296,22 @@ func (s *Select) makeString(sb *strings.Builder) {
 		sb.WriteString(" FROM")
 		s.Source.makeString(sb)
 	}
+
+	if s.Range != nil {
+		sb.WriteString(" RANGE")
+		s.Range.makeString(sb)
+	}
+
 	if s.Where != nil {
 		sb.WriteString(" WHERE")
 		s.Where.makeString(sb)
 	}
+
 	if s.Position != nil {
 		sb.WriteString(" POSITION")
 		s.Position.makeString(sb)
 	}
+
 	addInt64IfNotEmpty("OFFSET", s.Offset, sb)
 	addInt64IfNotEmpty("LIMIT", s.Limit, sb)
 }
@@ -345,7 +364,7 @@ func (c *Condition) makeString(sb *strings.Builder) {
 	}
 
 	sb.WriteByte(' ')
-	sb.WriteString(c.Operand)
+	c.Ident.makeString(sb)
 	sb.WriteByte(' ')
 	sb.WriteString(c.Op)
 	sb.WriteByte(' ')
@@ -355,6 +374,32 @@ func (c *Condition) makeString(sb *strings.Builder) {
 func (c *Condition) String() string {
 	var sb strings.Builder
 	c.makeString(&sb)
+	return sb.String()
+}
+
+// === Identifier
+func (id *Identifier) makeString(sb *strings.Builder) {
+	if id == nil {
+		return
+	}
+
+	sb.WriteString(id.Operand)
+	if len(id.Params) == 0 {
+		return
+	}
+	sb.WriteByte('(')
+	for i, p := range id.Params {
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		p.makeString(sb)
+	}
+	sb.WriteByte(')')
+}
+
+func (id *Identifier) String() string {
+	var sb strings.Builder
+	id.makeString(&sb)
 	return sb.String()
 }
 
@@ -443,8 +488,36 @@ func (src *Source) String() string {
 	return sb.String()
 }
 
-// === Describe
+// === Range
+func (r *Range) makeString(sb *strings.Builder) {
+	if r == nil {
+		return
+	}
 
+	if r.TmPoint2 == nil {
+		sb.WriteString(" ")
+		sb.WriteString(r.TmPoint1.String())
+	} else {
+		sb.WriteString(" [")
+		if r.TmPoint1 != nil {
+			sb.WriteString(r.TmPoint1.String())
+		}
+		sb.WriteByte(':')
+		sb.WriteString(r.TmPoint2.String())
+		sb.WriteString("]")
+	}
+}
+
+func (r *Range) String() string {
+	if r == nil {
+		return ""
+	}
+	var sb strings.Builder
+	r.makeString(&sb)
+	return sb.String()
+}
+
+// === Describe
 func (d *Describe) makeString(sb *strings.Builder) {
 	if d == nil {
 		return
@@ -481,7 +554,7 @@ func (dt *DateTime) String() string {
 	if dt == nil {
 		return ""
 	}
-	return time.Unix(0, int64(*dt)).String()
+	return strconv.Quote(time.Unix(0, int64(*dt)).String())
 }
 
 // === Size

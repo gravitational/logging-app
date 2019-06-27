@@ -161,3 +161,22 @@ func (id Id) String() string {
 func (el emptyListener) OnNewData(c Chunk) {
 
 }
+
+// FindChunkById returns index of chunk with cid in the sortedChunks slice.
+// It returns -1, if there is no chunk with cid in the slice.
+func FindChunkById(sortedChunks Chunks, cid Id) int {
+	i, j := 0, len(sortedChunks)
+	for i < j {
+		h := int(uint(i+j) >> 1)
+		if sortedChunks[h].Id() == cid {
+			return h
+		}
+
+		if sortedChunks[h].Id() < cid {
+			i = h + 1
+		} else {
+			j = h
+		}
+	}
+	return -1
+}
