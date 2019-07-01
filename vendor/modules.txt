@@ -7,6 +7,8 @@ github.com/alecthomas/participle/lexer
 github.com/davecgh/go-spew/spew
 # github.com/dustin/go-humanize v1.0.0
 github.com/dustin/go-humanize
+# github.com/edsrzf/mmap-go v1.0.0
+github.com/edsrzf/mmap-go
 # github.com/gogo/protobuf v1.2.1
 github.com/gogo/protobuf/proto
 github.com/gogo/protobuf/sortkeys
@@ -38,7 +40,7 @@ github.com/json-iterator/go
 github.com/julienschmidt/httprouter
 # github.com/konsorten/go-windows-terminal-sequences v1.0.1
 github.com/konsorten/go-windows-terminal-sequences
-# github.com/logrange/logrange v0.0.0-20190419222701-4ee1c20eafd6
+# github.com/logrange/logrange v0.1.43
 github.com/logrange/logrange/api
 github.com/logrange/logrange/api/rpc
 github.com/logrange/logrange/pkg/forwarder
@@ -58,11 +60,12 @@ github.com/logrange/logrange/pkg/scanner
 github.com/logrange/logrange/pkg/container
 github.com/logrange/logrange/pkg/utils/kvstring
 github.com/logrange/logrange/pkg/tindex
+github.com/logrange/logrange/pkg/tmindex
 github.com/logrange/logrange/pkg/syslog
 github.com/logrange/logrange/pkg/scanner/parser/date
 github.com/logrange/logrange/pkg/scanner/model
 github.com/logrange/logrange/pkg/scanner/parser
-# github.com/logrange/range v0.0.0-20190418174346-1af9041636f1
+# github.com/logrange/range v0.0.0-20190621064142-ba348b8545e2
 github.com/logrange/range/pkg/transport
 github.com/logrange/range/pkg/records
 github.com/logrange/range/pkg/rpc
@@ -75,6 +78,8 @@ github.com/logrange/range/pkg/records/chunk
 github.com/logrange/range/pkg/records/chunk/chunkfs
 github.com/logrange/range/pkg/utils/errors
 github.com/logrange/range/pkg/utils/fileutil
+github.com/logrange/range/pkg/bstorage
+github.com/logrange/range/pkg/sync
 github.com/logrange/range/pkg/utils/strutil
 # github.com/mitchellh/mapstructure v1.1.2
 github.com/mitchellh/mapstructure
@@ -88,9 +93,9 @@ github.com/mohae/deepcopy
 github.com/pkg/errors
 # github.com/sirupsen/logrus v1.4.1
 github.com/sirupsen/logrus
-# golang.org/x/crypto v0.0.0-20190418165655-df01cb2cc480
+# golang.org/x/crypto v0.0.0-20190426145343-a29dc8fdc734
 golang.org/x/crypto/ssh/terminal
-# golang.org/x/net v0.0.0-20190419010253-1f3472d942ba
+# golang.org/x/net v0.0.0-20190424112056-4829fb13d2c6
 golang.org/x/net/context
 golang.org/x/net/http2
 golang.org/x/net/http/httpguts
@@ -100,7 +105,7 @@ golang.org/x/net/context/ctxhttp
 # golang.org/x/oauth2 v0.0.0-20190402181905-9f3314589c9a
 golang.org/x/oauth2
 golang.org/x/oauth2/internal
-# golang.org/x/sys v0.0.0-20190403152447-81d4e9dc473e
+# golang.org/x/sys v0.0.0-20190426135247-a129542de9ae
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 # golang.org/x/text v0.3.0

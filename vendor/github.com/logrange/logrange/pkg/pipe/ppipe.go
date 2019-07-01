@@ -41,9 +41,9 @@ type (
 		logger  log4g.Logger
 		clsCtx  context.Context
 		cancelF context.CancelFunc
+		deleted bool
 
 		// the map contains state of all partitions that affected the pipe somehow.
-		// TODO how we are going to clean it up when a partition is removed?
 		partitions map[string]*ppDesc
 	}
 
@@ -118,13 +118,45 @@ func (pp *ppipe) getState(src string) (cursor.State, error) {
 		pp.lock.Unlock()
 		return cursor.State{}, errors2.NotFound
 	}
-	res := cursor.State{Id: sd.curId, Query: "select from {" + sd.Tags + "}", Pos: src + "=" + sd.Pos.String()}
+	res := cursor.State{Id: sd.curId, Src: src, Pos: src + "=" + sd.Pos.String()}
 	pp.lock.Unlock()
 	return res, nil
 }
 
+// cleanPartitions calls cleanPartitionsUnsafe() holding lock
+func (pp *ppipe) cleanPartitions() {
+	pp.lock.Lock()
+	defer pp.lock.Unlock()
+
+	pp.cleanPartitionsUnsafe()
+}
+
+// cleanPartitionsUnsafe walks through partitions and removes all that doesn't exist anymore
+func (pp *ppipe) cleanPartitionsUnsafe() {
+	if pp.deleted {
+		return
+	}
+
+	removed := 0
+	for src := range pp.partitions {
+		_, err := pp.svc.Journals.TIndex.GetJournalTags(src, false)
+		if err == errors2.NotFound {
+			delete(pp.partitions, src)
+			removed++
+		}
+	}
+
+	if removed > 0 {
+		pp.logger.Debug("cleanPartitions(): ", removed, " partitions were removed from the pipe settings ")
+		pp.svc.psr.savePipeInfo(pp.cfg.Name, pp.partitions)
+	}
+}
+
 // delete is the signal to delete the pipe and all metadata associated with it.
 func (pp *ppipe) delete() {
+	pp.lock.Lock()
+	pp.deleted = true
+	pp.lock.Unlock()
 	pp.cancelF()
 	pp.svc.psr.onDeleteStream(pp.cfg.Name)
 }
@@ -152,6 +184,8 @@ func (pp *ppipe) workerDone(w *worker) {
 	defer pp.svc.wwg.Done()
 
 	pp.lock.Lock()
+	// when a worker is over, let's check partitions to prevent looping on deleted ones...
+	pp.cleanPartitionsUnsafe()
 	pd, ok := pp.partitions[w.src]
 	if !ok {
 		pp.logger.Warn("workerDone(): Could not find the descriptor for src=", w.src, ". Deleted? Leaving as is...")

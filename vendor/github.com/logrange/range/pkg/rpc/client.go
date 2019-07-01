@@ -152,9 +152,12 @@ func (c *client) closeByError(err error) {
 	if err == nil {
 		return
 	}
-	c.logger.Error("closeByError(): err=", err)
 	c.lock.Lock()
 	defer c.lock.Unlock()
+	if c.closed {
+		return
+	}
+	c.logger.Error("closeByError(): err=", err)
 	c.close()
 }
 

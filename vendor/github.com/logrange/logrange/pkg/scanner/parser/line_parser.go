@@ -91,7 +91,7 @@ func NewLineParser(fileName string, dateParser date.Parser, maxRecSize int) (*li
 	lp := new(lineParser)
 	lp.f = f
 	lp.lr = newLineReader(f, maxRecSize)
-	lp.stats = NewTxtStats()
+	lp.stats = newStats(FmtText, &fileStats{})
 	lp.state = parsing
 
 	lp.dp = dateParser
@@ -161,9 +161,9 @@ func (lp *lineParser) parse(buf []byte) *model.Record {
 func (lp *lineParser) calcDate(tm time.Time) time.Time {
 	if tm.IsZero() {
 		tm = lp.lastDate
-		if tm.IsZero() {
-			tm = time.Now()
-		}
+		//if tm.IsZero() {
+		//	tm = time.Now()
+		//}
 	}
 	return tm
 }
@@ -192,7 +192,7 @@ func (lp *lineParser) GetStats() *Stats {
 		size = fi.Size()
 	}
 
-	pStat := NewTxtStats()
+	pStat := newStats(FmtText, &fileStats{})
 	pStat.FileStats.Size = size
 	pStat.FileStats.Pos = lp.GetStreamPos()
 	pStat.FmtStats = lp.stats.FmtStats.Copy()

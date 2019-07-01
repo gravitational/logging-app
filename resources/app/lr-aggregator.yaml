@@ -88,7 +88,7 @@ spec:
         gravitational.io/k8s-role: master
       containers:
         - name: lr-aggregator
-          image: "index.docker.io/logrange/logrange:v0.1.1"
+          image: "index.docker.io/logrange/logrange:v0.1.43"
           imagePullPolicy: Always
           ports:
             - name: rpc

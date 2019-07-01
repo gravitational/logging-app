@@ -21,10 +21,12 @@ import (
 	"github.com/logrange/logrange/pkg/lql"
 	"github.com/logrange/logrange/pkg/model"
 	"github.com/logrange/logrange/pkg/model/tag"
+	"github.com/logrange/logrange/pkg/utils"
 	"github.com/logrange/range/pkg/records"
 	"github.com/logrange/range/pkg/records/journal"
 	"github.com/pkg/errors"
 	"io"
+	"math"
 	"strings"
 )
 
@@ -37,6 +39,10 @@ type (
 
 		// The Query contains the initial query for the cursor.
 		Query string
+
+		// Src allows to overwrite From tags, by specifying the source of partition. If it is nil, the
+		// sources from the Query will be taken
+		Src string
 
 		// Pos indicates the position of the record which must be read next. If it is not empty, it
 		// will be applied to the Query
@@ -59,21 +65,11 @@ type (
 	// a new cursor could be created from the struct. crsr supports model.Iterator interface which allows to access
 	// to records the cursor selects
 	crsr struct {
-		logger       log4g.Logger
-		state        State
-		it           model.Iterator
-		jrnlProvider JournalsProvider
-		jDescs       map[string]*jrnlDesc
-	}
-
-	// JournalsProvider interface is used for creating new cursors. partition.Service most probably implements it.
-	JournalsProvider interface {
-		// GetJournals returns map of journals by tags:partition.Journal or an error, if any. The returned journals
-		// must be released after usage by Release() function
-		GetJournals(ctx context.Context, tagsCond *lql.Source, maxLimit int) (map[tag.Line]journal.Journal, error)
-
-		// Release releases the partition. Journal must not be used after the call
-		Release(jn string)
+		logger log4g.Logger
+		state  State
+		it     model.Iterator
+		itf    ItFactory
+		jDescs map[string]*jrnlDesc
 	}
 
 	jrnlDesc struct {
@@ -83,22 +79,24 @@ type (
 	}
 )
 
+var errNoSources = errors.Errorf("no sources for the expression the query")
+
 // newCursor creates the new cursor based on the state provided.
-func newCursor(ctx context.Context, state State, jrnlProvider JournalsProvider) (*crsr, error) {
-	l, err := lql.ParseLql(state.Query)
-	if err != nil || l.Select == nil {
-		return nil, errors.Wrapf(err, "could not parse lql=%s, expecting select statement", state.Query)
-	}
-	sel := l.Select
-
-	srcs, err := jrnlProvider.GetJournals(ctx, sel.Source, 50)
-
+func newCursor(ctx context.Context, state State, itf ItFactory) (*crsr, error) {
+	sel, srcs, err := getSourcesByState(ctx, state, itf)
 	if err != nil {
-		return nil, errors.Wrapf(err, "could not get a list of journals for the query %s", state.Query)
+		return nil, err
+	}
+	if len(srcs) == 0 {
+		return nil, errNoSources
 	}
 
-	if len(srcs) == 0 {
-		return nil, errors.Errorf("no sources for the expression the query %s", state.Query)
+	// Range
+	var tmr *model.TimeRange
+	if sel.Range != nil {
+		tmr = &model.TimeRange{}
+		tmr.MinTs = utils.GetInt64Val((*int64)(sel.Range.TmPoint1), 0)
+		tmr.MaxTs = utils.GetInt64Val((*int64)(sel.Range.TmPoint2), math.MaxInt64)
 	}
 
 	jd := make(map[string]*jrnlDesc, len(srcs))
@@ -106,7 +104,8 @@ func newCursor(ctx context.Context, state State, jrnlProvider JournalsProvider) 
 	var it model.Iterator
 	if len(srcs) == 1 {
 		for tags, jrnl := range srcs {
-			jit := jrnl.Iterator()
+			//jit := partition.NewJIterator(tmr, jrnl, jrnlProvider.GetTsIndexer(), jrnlProvider.GetTmIndexRebuilder())
+			jit := itf.Itearator(jrnl, tmr)
 			it = (&model.LogEventIterator{}).Wrap(tags, jit)
 
 			jd[jrnl.Name()] = &jrnlDesc{tags, jrnl, jit}
@@ -116,7 +115,7 @@ func newCursor(ctx context.Context, state State, jrnlProvider JournalsProvider) 
 
 		i := 0
 		for tags, jrnl := range srcs {
-			jit := jrnl.Iterator()
+			jit := itf.Itearator(jrnl, tmr)
 			jd[jrnl.Name()] = &jrnlDesc{tags, jrnl, jit}
 			mxs[i] = (&model.LogEventIterator{}).Wrap(tags, jit)
 			i++
@@ -140,9 +139,12 @@ func newCursor(ctx context.Context, state State, jrnlProvider JournalsProvider) 
 		it = mxs[0]
 	}
 
-	if sel.Where != nil {
-		it, err = newFIterator(it, sel.Where)
+	if sel.Where != nil || tmr != nil {
+		// whell. either we have some filtering where condition or time Range interval, wrapping
+		// initial iterator into the filter then.
+		it, err = newFIterator(it, sel.Where, tmr)
 		if err != nil {
+			releaseJournals(itf, srcs)
 			return nil, errors.Wrapf(err, "could not create filter for %s ", state.Query)
 		}
 	}
@@ -152,12 +154,58 @@ func newCursor(ctx context.Context, state State, jrnlProvider JournalsProvider) 
 	cur.state = state
 	cur.it = it
 	cur.jDescs = jd
-	cur.jrnlProvider = jrnlProvider
+	cur.itf = itf
 	if err := cur.applyPos(); err != nil {
+		releaseJournals(itf, srcs)
 		return nil, errors.Wrapf(err, "the position %s could not be applied ", state.Pos)
 	}
 
 	return cur, nil
+}
+
+// getSourcesByState is a helper function which returns sources and parsed
+// SELECT statement for the cursor state provided. The state can contain Query
+// with a SELECT statement or/and source where the data will be read. If Src field is
+// provided, then FROM part of the SELECT query will be ignored. Query could be
+// empty, this case the source (Src field) will be used.
+func getSourcesByState(ctx context.Context, state State, itf ItFactory) (sel *lql.Select, srcs map[tag.Line]journal.Journal, err error) {
+	if state.Query != "" {
+		l, err1 := lql.ParseLql(state.Query)
+		if err1 != nil {
+			err = errors.Wrapf(err1, "could not parse lql=%s, expecting select statement", state.Query)
+			return
+		}
+
+		if err1 != nil || l.Select == nil {
+			err = errors.Wrapf(err1, "could not parse lql=%s, expecting select statement", state.Query)
+			return
+		}
+
+		sel = l.Select
+		if state.Src == "" {
+			srcs, err = itf.GetJournals(ctx, sel.Source, 50)
+		}
+
+	} else {
+		sel = &lql.Select{}
+	}
+
+	if state.Src != "" {
+		ts, jrnl, err1 := itf.GetJournal(ctx, state.Src)
+		if err1 != nil {
+			err = errors.Wrapf(err1, "could not obtain journal by src=%s for the state=%s", state.Src, state)
+			return
+		}
+		srcs = map[tag.Line]journal.Journal{ts.Line(): jrnl}
+	}
+
+	return
+}
+
+func releaseJournals(itf ItFactory, srcs map[tag.Line]journal.Journal) {
+	for _, j := range srcs {
+		itf.Release(j.Name())
+	}
 }
 
 // String returns the cursor description
@@ -308,7 +356,7 @@ func (cur *crsr) collectPos() string {
 func (cur *crsr) close() {
 	for _, jd := range cur.jDescs {
 		jd.it.Close()
-		cur.jrnlProvider.Release(jd.j.Name())
+		cur.itf.Release(jd.j.Name())
 		jd.it = nil
 		jd.j = nil
 	}
@@ -394,5 +442,5 @@ func (cur *crsr) applyStatePos() error {
 }
 
 func (s State) String() string {
-	return fmt.Sprintf("{Id: %d, Query:\"%s\", Pos:%s}", s.Id, s.Query, s.Pos)
+	return fmt.Sprintf("{Id: %d, Query:\"%s\", Src:%s Pos:%s}", s.Id, s.Query, s.Src, s.Pos)
 }

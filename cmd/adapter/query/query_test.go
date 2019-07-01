@@ -45,7 +45,7 @@ func Test_BuildLqlQuery(t *testing.T) {
 				grQuery: "POD:pd1 AND podmist\"ake",
 				pipe:    "logrange.pipe=__default__",
 			},
-			want: "SELECT FROM logrange.pipe=__default__ WHERE msg CONTAINS \"POD:pd1 AND podmist\\\"ake\"",
+			want: "SELECT FROM logrange.pipe=__default__ WHERE lower(msg) CONTAINS \"pod:pd1 and podmist\\\"ake\"",
 		},
 		{
 			name: "build query with different case ok",

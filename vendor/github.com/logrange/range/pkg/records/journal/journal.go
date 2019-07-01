@@ -61,7 +61,7 @@ type (
 		// Name returns the journal name
 		Name() string
 
-		// Write - writes records received from the iterator to the journal.
+		// Write - writes records received from the JIterator to the journal.
 		// It returns number of records written, next record write position and an error if any
 		Write(ctx context.Context, rit records.Iterator) (int, Pos, error)
 
@@ -70,9 +70,6 @@ type (
 
 		// Count returns number of records in the journal
 		Count() uint64
-
-		// Iterator returns an iterator to walk through the journal records
-		Iterator() Iterator
 
 		// Sync could be called after a write to sync the written data with the
 		// storage to be sure the read will be able to read the new added
@@ -120,14 +117,14 @@ type (
 	// chunk is marked as deleted.
 	OnChunkDeleteF func(cid chunk.Id, filename string, err error)
 
-	// Iterator interface provides a journal iterator
+	// Iterator interface provides a journal JIterator
 	Iterator interface {
 		io.Closer
 		records.Iterator
 
 		Pos() Pos
 
-		// SetPos allows to change the iterator position
+		// SetPos allows to change the JIterator position
 		SetPos(pos Pos)
 	}
 )

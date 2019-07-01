@@ -24,6 +24,7 @@ import (
 	"github.com/logrange/range/pkg/records/journal"
 	"github.com/logrange/range/pkg/utils/bytes"
 	errors2 "github.com/logrange/range/pkg/utils/errors"
+	"github.com/logrange/range/pkg/utils/fileutil"
 	"github.com/pkg/errors"
 	"io/ioutil"
 	"os"
@@ -51,7 +52,7 @@ type (
 	}
 
 	inmemService struct {
-		Config   *InMemConfig       `inject:"inmemServiceConfig"`
+		Config   *InMemConfig       `inject:"tindexInMemCfg"`
 		Journals journal.Controller `inject:""`
 
 		logger log4g.Logger
@@ -106,7 +107,9 @@ func (ims *inmemService) GetJournal(tags string) (string, tag.Set, error) {
 	return ims.getOrCreateJournal(tags, false)
 }
 
-func (ims *inmemService) GetJournalTags(src string) (ts tag.Set, err error) {
+// GetJournalTags acquires the src and returns its Tags, if it is found. If no
+// error, and lock == true, the src must be released after usage. No release is needed if lock == false
+func (ims *inmemService) GetJournalTags(src string, lock bool) (ts tag.Set, err error) {
 	for {
 		ims.lock.Lock()
 		if ims.done {
@@ -122,7 +125,7 @@ func (ims *inmemService) GetJournalTags(src string) (ts tag.Set, err error) {
 
 		ts = td.tags
 		locked := !td.exclusive
-		if locked {
+		if locked && lock {
 			td.readers++
 		}
 		ims.lock.Unlock()
@@ -268,6 +271,7 @@ func (ims *inmemService) visitWaitingIfLocked(tef lql.TagsExpFunc, vf VisitorF, 
 	}
 	ims.lock.Unlock()
 
+	maxIdx := -1
 L1:
 	for i, v := range vstd {
 		skip := true
@@ -302,13 +306,15 @@ L1:
 		if visitFlags&VF_DO_NOT_RELEASE != 0 {
 			vstd[i] = nil
 		}
+		maxIdx = i
 		if !cont {
 			break
 		}
 	}
 
 	ims.lock.Lock()
-	for _, v := range vstd {
+	for i := 0; i <= maxIdx; i++ {
+		v := vstd[i]
 		if v != nil {
 			v.readers--
 		}
@@ -411,6 +417,13 @@ func (ims *inmemService) saveStateUnsafe() error {
 }
 
 func (ims *inmemService) checkConsistency(ctx context.Context) error {
+	if !ims.Config.DoNotSave {
+		err := fileutil.EnsureDirExists(ims.Config.WorkingDir)
+		if err != nil {
+			return errors.Wrapf(err, "checkConsistency(): could not be ensure the dir %s exists", ims.Config.WorkingDir)
+		}
+	}
+
 	err := ims.loadState()
 	if err != nil {
 		return err
@@ -436,7 +449,7 @@ func (ims *inmemService) checkConsistency(ctx context.Context) error {
 	})
 
 	if len(km) > 0 {
-		ims.logger.Warn("tindex contains %d records, which don't have corresponding journals")
+		ims.logger.Warn("tindex contains ", len(km), " records, which don't have corresponding journals")
 	}
 
 	if fail {

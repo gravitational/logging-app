@@ -19,21 +19,26 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"sort"
 
 	"github.com/logrange/range/pkg/records"
 	"github.com/logrange/range/pkg/records/chunk"
 )
 
 type (
-	iterator struct {
-		j     *journal
+	JIterator struct {
+		j     Journal
 		pos   Pos
 		ci    chunk.Iterator
 		bkwrd bool
 	}
 )
 
-func (it *iterator) SetBackward(bkwrd bool) {
+func NewJIterator(j Journal) *JIterator {
+	return &JIterator{j: j}
+}
+
+func (it *JIterator) SetBackward(bkwrd bool) {
 	if it.bkwrd == bkwrd {
 		return
 	}
@@ -43,7 +48,7 @@ func (it *iterator) SetBackward(bkwrd bool) {
 	}
 }
 
-func (it *iterator) Next(ctx context.Context) {
+func (it *JIterator) Next(ctx context.Context) {
 	it.Get(ctx)
 	if it.ci != nil {
 		it.ci.Next(ctx)
@@ -56,7 +61,7 @@ func (it *iterator) Next(ctx context.Context) {
 	}
 }
 
-func (it *iterator) Get(ctx context.Context) (records.Record, error) {
+func (it *JIterator) Get(ctx context.Context) (records.Record, error) {
 	err := it.ensureChkIt()
 	if err != nil {
 		return nil, err
@@ -73,15 +78,15 @@ func (it *iterator) Get(ctx context.Context) (records.Record, error) {
 	return rec, err
 }
 
-func (it *iterator) CurrentPos() records.IteratorPos {
+func (it *JIterator) CurrentPos() records.IteratorPos {
 	return it.Pos()
 }
 
-func (it *iterator) Pos() Pos {
+func (it *JIterator) Pos() Pos {
 	return it.pos
 }
 
-func (it *iterator) SetPos(pos Pos) {
+func (it *JIterator) SetPos(pos Pos) {
 	if pos == it.pos {
 		return
 	}
@@ -96,26 +101,26 @@ func (it *iterator) SetPos(pos Pos) {
 	it.pos = pos
 }
 
-func (it *iterator) Close() error {
+func (it *JIterator) Close() error {
 	it.closeChunk()
 	it.j = nil
 	return nil
 }
 
-func (it *iterator) Release() {
+func (it *JIterator) Release() {
 	if it.ci != nil {
 		it.ci.Release()
 	}
 }
 
-func (it *iterator) closeChunk() {
+func (it *JIterator) closeChunk() {
 	if it.ci != nil {
 		it.ci.Close()
 		it.ci = nil
 	}
 }
 
-func (it *iterator) advanceChunk() error {
+func (it *JIterator) advanceChunk() error {
 	it.closeChunk()
 	if it.bkwrd {
 		it.pos.CId--
@@ -127,17 +132,17 @@ func (it *iterator) advanceChunk() error {
 	return it.ensureChkIt()
 }
 
-// ensureChkId selects chunk by position iterator. It corrects the position if needed
-func (it *iterator) ensureChkIt() error {
+// ensureChkId selects chunk by position JIterator. It corrects the position if needed
+func (it *JIterator) ensureChkIt() error {
 	if it.ci != nil {
 		return nil
 	}
 
 	var chk chunk.Chunk
 	if it.bkwrd {
-		chk = it.j.getChunkByIdOrLess(it.pos.CId)
+		chk = it.getChunkByIdOrLess(it.pos.CId)
 	} else {
-		chk = it.j.getChunkByIdOrGreater(it.pos.CId)
+		chk = it.getChunkByIdOrGreater(it.pos.CId)
 	}
 
 	if chk == nil {
@@ -168,6 +173,32 @@ func (it *iterator) ensureChkIt() error {
 	return nil
 }
 
-func (it *iterator) String() string {
+func (it *JIterator) String() string {
 	return fmt.Sprintf("{pos=%s, ci exist=%t}", it.pos, it.ci != nil)
+}
+
+func (it *JIterator) getChunkByIdOrGreater(cid chunk.Id) chunk.Chunk {
+	chunks, _ := it.j.Chunks().Chunks(context.Background())
+	n := len(chunks)
+	if n == 0 {
+		return nil
+	}
+
+	idx := sort.Search(n, func(i int) bool { return chunks[i].Id() >= cid })
+	// according to the condition idx is always in [0..n]
+	if idx < n {
+		return chunks[idx]
+	}
+	return chunks[n-1]
+}
+
+func (it *JIterator) getChunkByIdOrLess(cid chunk.Id) chunk.Chunk {
+	chunks, _ := it.j.Chunks().Chunks(context.Background())
+	n := len(chunks)
+	if n == 0 || chunks[0].Id() > cid {
+		return nil
+	}
+
+	idx := sort.Search(n, func(i int) bool { return chunks[i].Id() > cid })
+	return chunks[idx-1]
 }

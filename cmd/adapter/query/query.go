@@ -102,9 +102,9 @@ func BuildLqlQuery(grQuery string, partition string, limit int, offset int) stri
 		q, err := parseGravityQuery(grQuery)
 
 		if err != nil { // Bad query or literal search request
-			lql.WriteString("msg")
+			lql.WriteString("lower(msg)")
 			lql.WriteString(" CONTAINS ")
-			lql.WriteString("\"" + escaper.Replace(grQuery) + "\"")
+			lql.WriteString("\"" + strings.ToLower(escaper.Replace(grQuery)) + "\"")
 
 		} else { // Good query
 			if len(q.Exp.Or) > 1 {
