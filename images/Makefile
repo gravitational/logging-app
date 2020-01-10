@@ -5,6 +5,7 @@ export
 ADAPTER_TAG := log-adapter:$(VERSION)
 HOOK_TAG := log-hook:$(VERSION)
 CONTAINERS := $(ADAPTER_TAG) $(HOOK_TAG)
+DOCKER_ARGS ?= --pull
 
 REPO_URL ?= quay.io/gravitational
 
@@ -17,11 +18,11 @@ hook:
 	if [ -z "$(CHANGESET)" ]; then \
 	  echo "CHANGESET is not set"; exit 1; \
 	fi;
-	docker build --build-arg CHANGESET=log-$(CHANGESET) --pull -t $(HOOK_TAG) hook
+	docker build --build-arg CHANGESET=log-$(CHANGESET) $(DOCKER_ARGS) -t $(HOOK_TAG) hook
 
 .PHONY: adapter
 adapter: adapter-build
-	docker build --pull -t $(ADAPTER_TAG) adapter
+	docker build $(DOCKER_ARGS) -t $(ADAPTER_TAG) adapter
 
 .PHONY: adapter-build
 adapter-build:
