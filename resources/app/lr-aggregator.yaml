@@ -57,10 +57,8 @@ data:
         ]
       }
     }
-
   log4g.properties: |
     # log4g configuration`
-
 ---
 apiVersion: extensions/v1beta1
 kind: Deployment
@@ -80,10 +78,11 @@ spec:
         app: lr-aggregator
       annotations:
         seccomp.security.alpha.kubernetes.io/pod: docker/default
-
     spec:
       securityContext:
         runAsUser: 0
+        selinuxOptions:
+          type: gravity_container_logger_t
       nodeSelector:
         gravitational.io/k8s-role: master
       containers:
