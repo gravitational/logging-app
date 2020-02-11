@@ -17,7 +17,7 @@ override BUILDDIR=$(ASSETS)/build
 # Configuration by convention: use TARGET as a directory name
 BINARIES=$(BUILDDIR)/$(TARGET)
 
-BBOX := quay.io/gravitational/debian-venti:go1.11.5-stretch
+BBOX := quay.io/gravitational/debian-venti:go1.12.9-buster
 LAPP := github.com/gravitational/logging-app
 
 all: prepare $(BINARIES)
