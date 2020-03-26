@@ -101,6 +101,13 @@ spec:
               mountPath: /var/log
             - name: varstate
               mountPath: /var/state
+          resources:
+            requests:
+              memory: 100Mi
+              cpu: 100m
+            limits:
+              memory: 500Mi
+              cpu: 500m
       volumes:
         - name: config
           configMap:
