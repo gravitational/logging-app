@@ -12,6 +12,8 @@ hooks:
       metadata:
         name: logging-app-bootstrap
       spec:
+        parallelism: 1
+        completions: 1
         template:
           metadata:
             name: logging-app-bootstrap
@@ -19,8 +21,8 @@ hooks:
             restartPolicy: OnFailure
             containers:
               - name: hook
-                image: quay.io/gravitational/debian-tall:0.0.1
-                command: ["/usr/local/bin/kubectl", "apply", "-f", "/var/lib/gravity/resources/resources.yaml"]
+                image: log-hook:0.0.1
+                args: ["bootstrap"]
   update:
     job: |
       apiVersion: batch/v1

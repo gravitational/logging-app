@@ -1,10 +1,25 @@
 #!/bin/sh
 set -e
 
-echo "Assuming changeset from the envrionment: $RIG_CHANGESET"
+echo "Assuming changeset from the environment: $RIG_CHANGESET"
 # note that rig does not take explicit changeset ID
 # taking it from the environment variables
-if [ $1 = "update" ]; then
+if [ $1 = "bootstrap" ]; then
+    echo "Checking: $RIG_CHANGESET"
+    if rig status $RIG_CHANGESET --retry-attempts=1 --retry-period=1s; then exit 0; fi
+
+    echo "Starting bootstrap, changeset: $RIG_CHANGESET"
+    # deleting in case it has been already attempted
+    rig cs delete --force -c cs/$RIG_CHANGESET
+    echo "Creating Log Forwarder ConfigMap"
+    rig upsert -f /var/lib/gravity/resources/init_logforwarder.yaml --debug
+    echo "Creating resources"
+    rig upsert -f /var/lib/gravity/resources/resources.yaml --debug
+    echo "Checking status"
+    rig status $RIG_CHANGESET --retry-attempts=120 --retry-period=1s --debug
+    echo "Freezing"
+    rig freeze
+elif [ $1 = "update" ]; then
     echo "Checking: $RIG_CHANGESET"
     if rig status $RIG_CHANGESET --retry-attempts=1 --retry-period=1s; then exit 0; fi
 
