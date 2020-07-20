@@ -21,12 +21,6 @@ spec:
   selector:
     role: log-collector
 ---
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: log-forwarders
-  namespace: kube-system
----
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
