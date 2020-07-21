@@ -14,14 +14,6 @@ spec:
       port: 8083
   selector:
     app: log-collector
-
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: log-forwarders
-  namespace: kube-system
-
 ---
 apiVersion: v1
 kind: ConfigMap
