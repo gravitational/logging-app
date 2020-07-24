@@ -34,10 +34,16 @@ elif [ $1 = "update" ]; then
     rig status $RIG_CHANGESET --retry-attempts=120 --retry-period=1s --debug
     echo "Freezing"
     rig freeze
+if [ $1 = "uninstall" ]; then
+    echo "Reverting changeset $RIG_CHANGESET"
+    rig revert -c cs/${RIG_CHANGESET}
+
+    echo "Starting uninstallation, changeset: $RIG_CHANGESET"
+    rig cs delete --force -c cs/${RIG_CHANGESET}
 elif [ $1 = "rollback" ]; then
     echo "Reverting changeset $RIG_CHANGESET"
     rig revert
     rig cs delete --force -c cs/$RIG_CHANGESET
 else
-    echo "Missing argument, should be either 'update' or 'rollback'"
+    echo "Missing argument, should be either 'bootstrap', 'uninstall', 'update' or 'rollback'"
 fi
