@@ -11,8 +11,13 @@ if [ $1 = "bootstrap" ]; then
     echo "Starting bootstrap, changeset: $RIG_CHANGESET"
     # deleting in case it has been already attempted
     rig cs delete --force -c cs/$RIG_CHANGESET
-    echo "Creating Log Forwarder ConfigMap"
-    rig upsert -f /var/lib/gravity/resources/logforwarder.yaml --debug
+    if ! kubectl get configmap name >/dev/null 2>&1
+    then
+        echo "Creating Log Forwarder ConfigMap"
+        rig upsert -f /var/lib/gravity/resources/logforwarder.yaml --debug
+    else
+        echo "Detected existing Log Forwarder ConfigMap, skipping creation"
+    fi
     echo "Creating resources"
     rig upsert -f /var/lib/gravity/resources/resources.yaml --debug
     echo "Checking status"
