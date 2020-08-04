@@ -27,10 +27,10 @@ elif [ $1 = "update" ]; then
     rig freeze
 if [ $1 = "uninstall" ]; then
     echo "Deleting Log Forwarder ConfigMap"
-    kubectl apply -f /var/lib/gravity/resources/logforwarder.yaml
+    kubectl delete -f /var/lib/gravity/resources/logforwarder.yaml
 
     echo "Deleting Log Forwarder related resources"
-    kubectl apply -f /var/lib/gravity/resources/resources.yaml
+    kubectl delete -f /var/lib/gravity/resources/resources.yaml
 elif [ $1 = "rollback" ]; then
     echo "Reverting changeset $RIG_CHANGESET"
     rig revert
