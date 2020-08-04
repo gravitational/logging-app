@@ -5,25 +5,11 @@ echo "Assuming changeset from the environment: $RIG_CHANGESET"
 # note that rig does not take explicit changeset ID
 # taking it from the environment variables
 if [ $1 = "bootstrap" ]; then
-    echo "Checking: $RIG_CHANGESET"
-    if rig status $RIG_CHANGESET --retry-attempts=1 --retry-period=1s; then exit 0; fi
+    echo "Creating Log Forwarder ConfigMap"
+    kubectl apply -f /var/lib/gravity/resources/logforwarder.yaml
 
-    echo "Starting bootstrap, changeset: $RIG_CHANGESET"
-    # deleting in case it has been already attempted
-    rig cs delete --force -c cs/$RIG_CHANGESET
-    if ! kubectl get configmap log-forwarders >/dev/null 2>&1
-    then
-        echo "Creating Log Forwarder ConfigMap"
-        rig upsert -f /var/lib/gravity/resources/logforwarder.yaml --debug
-    else
-        echo "Detected existing Log Forwarder ConfigMap, skipping creation"
-    fi
-    echo "Creating resources"
-    rig upsert -f /var/lib/gravity/resources/resources.yaml --debug
-    echo "Checking status"
-    rig status $RIG_CHANGESET --retry-attempts=120 --retry-period=1s --debug
-    echo "Freezing"
-    rig freeze
+    echo "Creating Log Forwarder related resources"
+    kubectl apply -f /var/lib/gravity/resources/resources.yaml
 elif [ $1 = "update" ]; then
     echo "Checking: $RIG_CHANGESET"
     if rig status $RIG_CHANGESET --retry-attempts=1 --retry-period=1s; then exit 0; fi
@@ -40,11 +26,11 @@ elif [ $1 = "update" ]; then
     echo "Freezing"
     rig freeze
 if [ $1 = "uninstall" ]; then
-    echo "Reverting changeset $RIG_CHANGESET"
-    rig revert -c cs/${RIG_CHANGESET}
+    echo "Deleting Log Forwarder ConfigMap"
+    kubectl apply -f /var/lib/gravity/resources/logforwarder.yaml
 
-    echo "Starting uninstallation, changeset: $RIG_CHANGESET"
-    rig cs delete --force -c cs/${RIG_CHANGESET}
+    echo "Deleting Log Forwarder related resources"
+    kubectl apply -f /var/lib/gravity/resources/resources.yaml
 elif [ $1 = "rollback" ]; then
     echo "Reverting changeset $RIG_CHANGESET"
     rig revert
