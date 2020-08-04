@@ -5,7 +5,15 @@ set -e
 # taking it from the environment variables
 
 echo "--> Assuming changeset from the environment: $RIG_CHANGESET"
-if [ $1 = "update" ]; then
+if [ $1 = "install" ]; then
+    echo "--> Creating Log Forwarder ConfigMap"
+    kubectl apply -f /var/lib/gravity/resources/logforwarder.yaml
+
+    echo "--> Creating new Log Forwarder related resources"
+    for file in /var/lib/gravity/resources/app/*.yaml; do
+        kubectl apply -f $file
+    done
+elif [ $1 = "update" ]; then
     echo "--> Checking: $RIG_CHANGESET"
     if rig status ${RIG_CHANGESET} --retry-attempts=1 --retry-period=1s; then exit 0; fi
 
@@ -32,13 +40,18 @@ if [ $1 = "update" ]; then
 
     echo "--> Freezing"
     rig freeze
+if [ $1 = "uninstall" ]; then
+    echo "--> Deleting Log Forwarder ConfigMap"
+    kubectl delete -f /var/lib/gravity/resources/logforwarder.yaml
 
+    echo "--> Deleting Log Forwarder related resources"
+    for file in /var/lib/gravity/resources/app/*.yaml; do
+        kubectl delete -f $file
+    done
 elif [ $1 = "rollback" ]; then
     echo "--> Reverting changeset $RIG_CHANGESET"
     rig revert
     rig cs delete --force -c cs/${RIG_CHANGESET}
-
 else
-    echo "--> Missing argument, should be either 'update' or 'rollback'"
-
+    echo "--> Missing argument, should be either 'install', 'uninstall', 'update' or 'rollback'"
 fi

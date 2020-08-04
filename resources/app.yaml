@@ -12,6 +12,8 @@ hooks:
       metadata:
         name: logging-app-install
       spec:
+        parallelism: 1
+        completions: 1
         template:
           metadata:
             name: logging-app-install
@@ -19,8 +21,8 @@ hooks:
             restartPolicy: OnFailure
             containers:
               - name: hook
-                image: quay.io/gravitational/debian-tall:0.0.1
-                command: ["/usr/local/bin/kubectl", "apply", "-f", "/var/lib/gravity/resources/app/"]
+                image: log-hook:0.1.0
+                args: ["install"]
   update:
     job: |
       apiVersion: batch/v1
@@ -71,5 +73,5 @@ hooks:
             restartPolicy: OnFailure
             containers:
               - name: hook
-                image: quay.io/gravitational/debian-tall:0.0.1
-                command: ["/usr/local/bin/kubectl", "delete", "-f", "/var/lib/gravity/resources/app/"]
+                image: log-hook:0.1.0
+                args: ["uninstall"]
