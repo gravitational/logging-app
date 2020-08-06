@@ -40,7 +40,7 @@ elif [ $1 = "update" ]; then
 
     echo "--> Freezing"
     rig freeze
-if [ $1 = "uninstall" ]; then
+elif [ $1 = "uninstall" ]; then
     echo "--> Deleting Log Forwarder ConfigMap"
     kubectl delete -f /var/lib/gravity/resources/logforwarder.yaml
 
