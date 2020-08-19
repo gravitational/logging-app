@@ -1,3 +1,4 @@
 #!/bin/sh
 
-/usr/bin/savelog -n -c 7 /var/log/messages
+# set cycle versions to 9 to have at least 10 files with logs
+/usr/bin/savelog -n -c 9 /var/log/messages
