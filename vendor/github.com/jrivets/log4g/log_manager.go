@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"github.com/jrivets/gorivets"
 )
@@ -19,28 +18,25 @@ type logManager struct {
 	rwLock sync.RWMutex
 }
 
-var __lm atomic.Value
+var __lm *logManager
 var __lm_lock sync.Mutex
 
 func lm() *logManager {
-	if res, ok := __lm.Load().(*logManager); ok && res != nil {
-		return res
+	if __lm != nil {
+		return __lm
 	}
 
 	__lm_lock.Lock()
 	defer __lm_lock.Unlock()
 
-	if res, ok := __lm.Load().(*logManager); ok && res != nil {
-		return res
+	if __lm != nil {
+		return __lm
 	}
-
 	lm := &logManager{config: newLogConfig()}
-	// TODO: the global map distinguishes processes by its ID, what doesn't work on
-	// linux. commented so far.
-	// lm.registerInGMap()
-	__lm.Store(lm)
+	lm.registerInGMap()
+	__lm = lm
 
-	return lm
+	return __lm
 }
 
 func (lm *logManager) registerInGMap() {

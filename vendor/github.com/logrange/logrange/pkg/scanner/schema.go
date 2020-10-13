@@ -34,7 +34,6 @@ type (
 		DateFormats []string
 		// Meta describes Tags and fields assignment. It is formded based on PathMather
 		// where keys are taken by group names from the regular expression
-
 		Meta Meta
 	}
 
@@ -71,7 +70,7 @@ func (s *schema) getMeta(d *desc) Meta {
 		tags[k] = s.subsVars(v, vars)
 	}
 
-	fields := make(map[string]string, len(s.cfg.Meta.Fields))
+	fields := make(map[string]string, len(s.cfg.Meta.Tags))
 	for k, v := range s.cfg.Meta.Fields {
 		fields[k] = s.subsVars(v, vars)
 	}
@@ -121,8 +120,7 @@ func (sc *SchemaConfig) Check() error {
 	if err != nil {
 		return fmt.Errorf("PathMatcher=%v is invalid; %v", sc.PathMatcher, err)
 	}
-
-	if _, ok := parser.KnownDataFormats[sc.DataFormat]; !ok {
+	if sc.DataFormat != parser.FmtK8Json && sc.DataFormat != parser.FmtText && sc.DataFormat != parser.FmtPure {
 		return fmt.Errorf("DataFormat is unknown=%v", sc.DataFormat)
 	}
 	return nil
