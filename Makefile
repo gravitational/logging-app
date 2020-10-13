@@ -4,7 +4,7 @@ NAME := logging-app
 OPS_URL ?= https://opscenter.localhost.localdomain:33009
 OUT ?= $(NAME).tar.gz
 GRAVITY ?= gravity
-LOGRANGE_VERSION := 0.1.46
+LOGRANGE_VERSION := v0.1.46
 
 UPDATE_IMAGE_OPTS := \
 	--set-image=log-adapter:$(VERSION) \
