@@ -87,7 +87,7 @@ spec:
           type: gravity_container_logger_t
       containers:
         - name: lr-collector
-          image: "index.docker.io/logrange/collector:v0.1.43"
+          image: "index.docker.io/logrange/collector:v0.0.0"
           imagePullPolicy: Always
           volumeMounts:
             - name: config
