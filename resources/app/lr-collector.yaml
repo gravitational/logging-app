@@ -85,6 +85,9 @@ spec:
         runAsUser: 0
         seLinuxOptions:
           type: gravity_container_logger_t
+      tolerations:
+      # tolerate any taints
+      - operator: "Exists"
       containers:
         - name: lr-collector
           image: "index.docker.io/logrange/collector:v0.0.0"

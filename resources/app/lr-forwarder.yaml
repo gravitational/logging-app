@@ -57,6 +57,9 @@ spec:
           type: gravity_container_logger_t
       nodeSelector:
         gravitational.io/k8s-role: master
+      tolerations:
+      # tolerate any taints
+      - operator: "Exists"
       containers:
         - name: lr-forwarder
           image: "index.docker.io/logrange/forwarder:v0.0.0"
