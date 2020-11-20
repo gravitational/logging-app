@@ -86,6 +86,9 @@ spec:
           type: gravity_container_logger_t
       nodeSelector:
         gravitational.io/k8s-role: master
+      tolerations:
+      # tolerate any taints
+      - operator: "Exists"
       containers:
         - name: lr-aggregator
           image: "index.docker.io/logrange/logrange:v0.0.0"
