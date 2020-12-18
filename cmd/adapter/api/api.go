@@ -23,6 +23,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/LK4D4/joincontext"
 	"github.com/gravitational/logging-app/cmd/adapter/query"
 	log "github.com/gravitational/logrus"
@@ -30,11 +36,6 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/logrange/logrange/api"
 	"github.com/logrange/logrange/pkg/utils"
-	"io"
-	"net/http"
-	"strconv"
-	"strings"
-	"time"
 )
 
 type (
@@ -64,8 +65,10 @@ type (
 
 	// Represents gravitational log entry
 	grLogEntry struct {
-		Type    string `json:"type"`
-		Payload string `json:"payload"`
+		Type    string            `json:"type"`
+		Payload string            `json:"payload"`
+		Tags    map[string]string `json:"tags"`
+		Fields  map[string]string `json:"fields"`
 	}
 
 	// Compressed tarball writer
@@ -348,6 +351,11 @@ func toGravityLogEntries(evs []*api.LogEvent) ([]string, error) {
 	logEntry := &grLogEntry{Type: "data"}
 	for _, e := range evs {
 		logEntry.Payload = e.Message
+
+		logEntry.Tags = parseCSVIntoMap(e.Tags)
+
+		logEntry.Fields = parseCSVIntoMap(e.Fields)
+
 		logEntryBytes, err := json.Marshal(logEntry)
 		if err != nil {
 			return nil, trace.Wrap(err)
@@ -355,6 +363,23 @@ func toGravityLogEntries(evs []*api.LogEvent) ([]string, error) {
 		entries = append(entries, string(logEntryBytes))
 	}
 	return entries, nil
+}
+
+func parseCSVIntoMap(csv string) (results map[string]string) {
+
+	// iterate over the elements in the form `elem1, elem2, elem3, ...`
+	for _, elem := range strings.Split(csv, ",") {
+
+		// each element should be in the form `key=value`
+		elemSplit := strings.Split(elem, "=")
+		if len(elemSplit) == 2 {
+			results[elemSplit[0]] = elemSplit[1]
+		} else {
+			// one of the element was not in the form `key=value`
+		}
+	}
+
+	return results
 }
 
 func writeEvents(evs []*api.LogEvent, buf *bytes.Buffer) {
