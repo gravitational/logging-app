@@ -365,15 +365,22 @@ func toGravityLogEntries(evs []*api.LogEvent) ([]string, error) {
 	return entries, nil
 }
 
+// parseCSVIntoMap takes in a string with a CSV (Comma Separated Value) string
+// with each element in the form `key=value` and translates it into a "dictionary" map
 func parseCSVIntoMap(csv string) (results map[string]string) {
 
 	// iterate over the elements in the form `elem1, elem2, elem3, ...`
 	for _, elem := range strings.Split(csv, ",") {
 
 		// each element should be in the form `key=value`
+		// FIXME this does not play well with keys that contain '='  chars
+		// even if quoted, every other character (whitespace included) is fine
 		elemSplit := strings.Split(elem, "=")
 		if len(elemSplit) == 2 {
 			results[elemSplit[0]] = elemSplit[1]
+		} else if len(elemSplit) == 1 {
+			// empty tag with only a key defined
+			results[elemSplit[0]] = ""
 		} else {
 			// one of the element was not in the form `key=value`
 		}
