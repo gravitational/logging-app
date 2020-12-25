@@ -60,7 +60,7 @@ data:
   log4g.properties: |
     # log4g configuration`
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: lr-aggregator
