@@ -1,7 +1,10 @@
 
 # Gravity Log Application
 
-Gravity Log Application is intended for gathering logs and providing API for logs retrieval in Gravity cluster. The application is based on [Logrange](https://github.com/logrange/logrange) streaming database.
+[Gravity](https://github.com/gravitational/gravity)'s Log Application is intended for gathering logs and providing API for logs retrieval in a Gravity cluster.
+The application is based on [Logrange](https://github.com/logrange/logrange) streaming database.
+
+## Using Gravity's Logging Application
 
 ### 1. HTTP API
 
@@ -9,7 +12,7 @@ The server listens on port 8083 by default.
 
 #### Querying Logs
 
-###### GET: /v1/log?limit=&query=
+##### GET: /v1/log?limit=&query=
 
 - `query` can contain the following terms:<br/>
    * `pod`:<name> - to limit search to a specific pod<br/>
@@ -19,9 +22,9 @@ The server listens on port 8083 by default.
 
   **Example**:<br/>
   `/v1/log?limit=1&query=pod:p1 and container:"c1" and file:f1 or file:f2`
-  
+
 - `query` param could be used to search for literal text occurrence:
-  
+
   **Example**:<br/>
   `/v1/log?limit=100&query="some text"`
 
@@ -31,7 +34,7 @@ The server listens on port 8083 by default.
 
 #### Download logs
 
-###### GET: /v1/download
+##### GET: /v1/download
 
 - output format: compressed tarball stream (`tar.gz`)
 
@@ -47,7 +50,12 @@ Job that syncs the updates to Gravity log forwarder configuration to internal fo
 
 Job that runs scheduled queries. Queries can be configured (see `CronQueries` section of the config), by default there is a single query configured which is used to keep the database size within limits by periodically trimming older entries.
 
-### 3. Build instructions
+## Contributing
+
+If you'd like to contribute to Gravity's Logging Application, check out our [contributing guidelines](./CONTRIBUTING.md)
+and [Code of Conduct](./CODE_OF_CONDUCT.md).
+
+### Build instructions
 
 ```
  $ git clone git@github.com:gravitational/logging-app.git
