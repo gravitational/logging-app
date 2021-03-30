@@ -14,8 +14,10 @@ if [ $1 = "install" ]; then
     kubectl create -f /var/lib/gravity/resources/app
 
     echo "--> Waiting resources availability"
-    set +e # debug error here
-    kubectl rollout status -f /var/lib/gravity/resources/app
+    for deployment in log-collector lr-forwarder lr-aggregator; do
+	kubectl rollout status deployment $deployment
+    done
+    kubectl rollout status daemonset lr-collector
 elif [ $1 = "update" ]; then
     echo "--> Deleting old deployments"
     for deployment in log-collector lr-forwarder lr-aggregator; do
