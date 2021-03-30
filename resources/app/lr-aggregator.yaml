@@ -26,7 +26,7 @@ metadata:
 data:
   logrange.json: |
     {
-      "BaseDir": "/var/lib/gravity/logrange/data/",
+      "BaseDir": "/var/lib/gravity/logrange/aggregator/",
       "HostHostId": 0,
       "HostLeaseTTLSec": 5,
       "HostRegisterTimeoutSec": 0,
