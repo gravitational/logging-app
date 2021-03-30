@@ -369,6 +369,7 @@ func toGravityLogEntries(evs []*api.LogEvent) ([]string, error) {
 // with each element in the form `key=value` and translates it into a "dictionary" map
 func parseCSVIntoMap(csv string) (results map[string]string) {
 
+	results = make(map[string]string)
 	// iterate over the elements in the form `elem1, elem2, elem3, ...`
 	for _, elem := range strings.Split(csv, ",") {
 
