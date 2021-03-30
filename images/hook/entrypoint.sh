@@ -1,5 +1,5 @@
 #!/bin/sh
-set -e
+set -xe
 
 # note that rig does not take explicit changeset ID
 # taking it from the environment variables
@@ -7,19 +7,14 @@ set -e
 echo "--> Assuming changeset from the environment: $RIG_CHANGESET"
 if [ $1 = "install" ]; then
     echo "--> Creating Log Forwarder ConfigMap"
-    kubectl apply -f /var/lib/gravity/resources/logforwarder.yaml
+    kubectl create -f /var/lib/gravity/resources/logforwarder.yaml
 
     echo "--> Creating new Log Forwarder related resources"
-    for file in /var/lib/gravity/resources/app/*.yaml; do
-        kubectl apply -f $file
-    done
+    kubectl create -f /var/lib/gravity/resources/app
+
+    echo "--> Waiting resources availability"
+    kubectl rollout status -f /var/lib/gravity/resources/app
 elif [ $1 = "update" ]; then
-    echo "--> Checking: $RIG_CHANGESET"
-    if rig status ${RIG_CHANGESET} --retry-attempts=1 --retry-period=1s; then exit 0; fi
-
-    echo "--> Starting update, changeset: $RIG_CHANGESET"
-    rig cs delete --force -c cs/${RIG_CHANGESET}
-
     echo "--> Deleting old deployments"
     for deployment in log-collector lr-forwarder lr-aggregator; do
         rig delete deployments/$deployment --resource-namespace=kube-system --force
