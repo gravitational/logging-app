@@ -14,6 +14,7 @@ if [ $1 = "install" ]; then
     kubectl create -f /var/lib/gravity/resources/app
 
     echo "--> Waiting resources availability"
+    set +e # debug error here
     kubectl rollout status -f /var/lib/gravity/resources/app
 elif [ $1 = "update" ]; then
     echo "--> Deleting old deployments"
