@@ -7,7 +7,8 @@ set -xe
 echo "--> Assuming changeset from the environment: $RIG_CHANGESET"
 if [ $1 = "install" ]; then
     echo "--> Creating Log Forwarder ConfigMap"
-    kubectl create -f /var/lib/gravity/resources/logforwarder.yaml
+    # apply is used here because log-forwarder could be created by gravity
+    kubectl apply -f /var/lib/gravity/resources/logforwarder.yaml
 
     echo "--> Creating new Log Forwarder related resources"
     kubectl create -f /var/lib/gravity/resources/app
