@@ -26,7 +26,7 @@ metadata:
 data:
   logrange.json: |
     {
-      "BaseDir": "/var/lib/gravity/logrange/data/",
+      "BaseDir": "/var/lib/gravity/logrange/aggregator/",
       "HostHostId": 0,
       "HostLeaseTTLSec": 5,
       "HostRegisterTimeoutSec": 0,
@@ -81,7 +81,7 @@ spec:
     spec:
       priorityClassName: system-cluster-critical
       securityContext:
-        runAsUser: 0
+        runAsUser: -1
         seLinuxOptions:
           type: gravity_container_logger_t
       nodeSelector:
@@ -100,12 +100,8 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /opt/logrange/config
-            - name: extdockercontainers
-              mountPath: /ext/docker/containers
             - name: varlibgravitylogrange
               mountPath: /var/lib/gravity/logrange
-            - name: varlog
-              mountPath: /var/log
             - name: varstate
               mountPath: /var/state
           resources:
@@ -119,16 +115,10 @@ spec:
         - name: config
           configMap:
             name: lr-aggregator
-        - name: extdockercontainers
-          hostPath:
-            path: /ext/docker/containers
         - name: varlibgravitylogrange
           hostPath:
             path: /var/lib/gravity/logrange
             type: DirectoryOrCreate
-        - name: varlog
-          hostPath:
-            path: /var/log
         - name: varstate
           hostPath:
             path: /var/state

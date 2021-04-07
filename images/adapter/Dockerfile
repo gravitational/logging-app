@@ -1,4 +1,4 @@
-FROM quay.io/gravitational/debian-tall:stretch
+FROM quay.io/gravitational/debian-tall:buster
 
 RUN mkdir -p /opt/logrange/gravity
 
