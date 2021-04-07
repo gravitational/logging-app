@@ -25,13 +25,13 @@ data:
 
       "Storage": {
         "Type": "file",
-        "Location": "/var/lib/gravity/logrange/lr/storage/"
+        "Location": "/var/lib/gravity/logrange/forwarder/"
       }
     }
   log4g.properties: |
     # log4g configuration
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: lr-forwarder
@@ -52,7 +52,7 @@ spec:
     spec:
       priorityClassName: system-cluster-critical
       securityContext:
-        runAsUser: 0
+        runAsUser: -1
         seLinuxOptions:
           type: gravity_container_logger_t
       nodeSelector:
@@ -67,12 +67,8 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /opt/logrange/lr/config
-            - name: extdockercontainers
-              mountPath: /ext/docker/containers
             - name: varlibgravitylogrange
               mountPath: /var/lib/gravity/logrange
-            - name: varlog
-              mountPath: /var/log
             - name: varstate
               mountPath: /var/state
           resources:
@@ -86,16 +82,10 @@ spec:
         - name: config
           configMap:
             name: lr-forwarder
-        - name: extdockercontainers
-          hostPath:
-            path: /ext/docker/containers
         - name: varlibgravitylogrange
           hostPath:
             path: /var/lib/gravity/logrange
             type: DirectoryOrCreate
-        - name: varlog
-          hostPath:
-            path: /var/log
         - name: varstate
           hostPath:
             path: /var/state

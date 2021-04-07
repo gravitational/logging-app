@@ -56,13 +56,13 @@ data:
       },
       "Storage": {
         "Type": "file",
-        "Location": "/var/lib/gravity/logrange/lr/storage/"
+        "Location": "/var/lib/gravity/logrange/collector/"
       }
     }
   log4g.properties: |
     # log4g configuration
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: lr-collector

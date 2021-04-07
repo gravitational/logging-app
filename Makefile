@@ -21,7 +21,7 @@ package:
 	$(MAKE) -C images all
 
 .PHONY: adapter
-collector:
+adapter:
 	$(MAKE) -C images adapter
 
 .PHONY: hook
