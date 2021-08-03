@@ -81,7 +81,7 @@ spec:
     spec:
       priorityClassName: system-cluster-critical
       securityContext:
-        runAsUser: -1
+        runAsUser: 0
         seLinuxOptions:
           type: gravity_container_logger_t
       nodeSelector:
