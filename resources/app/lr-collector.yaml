@@ -56,7 +56,7 @@ data:
       },
       "Storage": {
         "Type": "file",
-        "Location": "/var/lib/gravity/logrange/collector/"
+        "Location": "/var/lib/gravity/logrange/lr/storage/"
       }
     }
   log4g.properties: |
