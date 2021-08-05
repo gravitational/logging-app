@@ -25,7 +25,7 @@ data:
 
       "Storage": {
         "Type": "file",
-        "Location": "/var/lib/gravity/logrange/forwarder/"
+        "Location": "/var/lib/gravity/logrange/lr/storage/"
       }
     }
   log4g.properties: |
