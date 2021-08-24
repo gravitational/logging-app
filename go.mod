@@ -1,6 +1,6 @@
 module github.com/gravitational/logging-app
 
-go 1.11
+go 1.15
 
 require (
 	github.com/LK4D4/joincontext v0.0.0-20171026170139-1724345da6d5
@@ -24,3 +24,5 @@ require (
 	k8s.io/client-go v0.19.14
 	k8s.io/klog v0.3.0 // indirect
 )
+
+replace 	github.com/googleapis/gnostic => github.com/googleapis/gnostic v0.4.1
