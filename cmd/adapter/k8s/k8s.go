@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	log "github.com/gravitational/logrus"
 	"github.com/gravitational/trace"
 	"github.com/logrange/logrange/client"
@@ -50,6 +51,7 @@ type (
 		cli *kubernetes.Clientset
 
 		logger *log.Entry
+		ctx    context.Context
 	}
 
 	// Represents Gravity or Logrange k8s config
@@ -86,7 +88,7 @@ const (
 )
 
 // Creates new domain specific K8s client for the given configs
-func NewClient(gravityK8sCfg *Config, lograngeK8sCfg *Config,
+func NewClient(ctx context.Context, gravityK8sCfg *Config, lograngeK8sCfg *Config,
 	lograngeFwdTmpl *forwarder.WorkerConfig) (*Client, error) {
 
 	config, err := rest.InClusterConfig()
@@ -103,6 +105,7 @@ func NewClient(gravityK8sCfg *Config, lograngeK8sCfg *Config,
 		lograngeFwdTmpl: lograngeFwdTmpl,
 		cli:             cli,
 		logger:          log.WithField(trace.Component, "logging-app.k8s"),
+		ctx:             ctx,
 	}, nil
 }
 
@@ -190,7 +193,7 @@ func (cli *Client) mergeFwdConfigs(lrFwdCfg *forwarder.Config, grFwdCfgs []*grav
 func (cli *Client) getLograngeForwarderCfg() (*client.Config, error) {
 	cfgMap, err := cli.cli.CoreV1().
 		ConfigMaps(cli.lograngeCfg.Namespace).
-		Get(cli.lograngeCfg.ForwarderConfigMapName, metav1.GetOptions{})
+		Get(cli.ctx, cli.lograngeCfg.ForwarderConfigMapName, metav1.GetOptions{})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -215,7 +218,7 @@ func (cli *Client) getLograngeForwarderCfg() (*client.Config, error) {
 func (cli *Client) getGravityForwarderConfig() ([]*gravityForwarderCfg, error) {
 	cfgMap, err := cli.cli.CoreV1().
 		ConfigMaps(cli.gravityCfg.Namespace).
-		Get(cli.gravityCfg.ForwarderConfigMapName, metav1.GetOptions{})
+		Get(cli.ctx, cli.gravityCfg.ForwarderConfigMapName, metav1.GetOptions{})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -248,7 +251,7 @@ func (cli *Client) updateLograngeFwdCfg(cfg *client.Config) error {
 	if err == nil {
 		_, err = cli.cli.CoreV1().
 			ConfigMaps(cli.lograngeCfg.Namespace).
-			Patch(cli.lograngeCfg.ForwarderConfigMapName, types.StrategicMergePatchType, patchBytes)
+			Patch(cli.ctx, cli.lograngeCfg.ForwarderConfigMapName, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
 	}
 
 	return trace.Wrap(err)

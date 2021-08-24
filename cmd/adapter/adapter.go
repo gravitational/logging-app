@@ -18,14 +18,15 @@ package main
 
 import (
 	"context"
+	"sync"
+	"time"
+
 	"github.com/gravitational/logging-app/cmd/adapter/api"
 	"github.com/gravitational/logging-app/cmd/adapter/k8s"
 	log "github.com/gravitational/logrus"
 	"github.com/gravitational/trace"
 	lapi "github.com/logrange/logrange/api"
 	"github.com/logrange/logrange/pkg/utils"
-	"sync"
-	"time"
 )
 
 type (
@@ -81,13 +82,14 @@ func NewAdapter(cfg Config, cli lapi.Client) *Adapter {
 // Passed context controls adapter's lifespan (including started goroutines).
 func (ad *Adapter) Run(ctx context.Context) error {
 	ad.logger.Info("Starting, config=", ad.cfg)
-	if err := ad.init(); err != nil {
-		return trace.Wrap(err)
-	}
 
 	// cancel in case if apiServer fails with error
 	// we need to cancel jobs in terms of this function
 	ctx, cancel := context.WithCancel(ctx)
+
+	if err := ad.init(ctx); err != nil {
+		return trace.Wrap(err)
+	}
 
 	// async recurring jobs
 	ad.startSync(ctx)
@@ -103,12 +105,12 @@ func (ad *Adapter) Run(ctx context.Context) error {
 	return err
 }
 
-func (ad *Adapter) init() error {
+func (ad *Adapter) init(ctx context.Context) error {
 	wTmpl, err := ad.cfg.Logrange.getForwarderTmpl()
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	ad.k8sClient, err = k8s.NewClient(ad.cfg.Gravity.Kubernetes,
+	ad.k8sClient, err = k8s.NewClient(ctx, ad.cfg.Gravity.Kubernetes,
 		ad.cfg.Logrange.Kubernetes, wTmpl)
 	return trace.Wrap(err)
 }
